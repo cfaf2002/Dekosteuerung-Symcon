@@ -104,6 +104,20 @@ check(!DekoLogic::Evening(at('00:15', '2026-11-06'), h(16), h(23), h(0, 30), $we
 check(!DekoLogic::Evening(at('00:45', '2026-11-08'), h(16), h(23), h(0, 30), $we)['active'], 'Sonntag 0:45: Samstagabend vorbei');
 check(DekoLogic::Evening(at('00:15', '2026-11-08'), h(16), h(23), h(0, 30), $we)['active'], 'Sonntag 0:15: Samstagabend läuft noch');
 
+// Sondertage und Verlängerung
+$special = [1231 => h(2), 1224 => h(1)];
+$e = DekoLogic::Evening(at('01:30', '2027-01-01'), h(16), h(23), h(0, 30), $we, $special);
+check($e['active'] && $e['day'] === '2026-12-31' && $e['special'] === 1231, 'Silvester: um 1:30 noch an');
+check(!DekoLogic::Evening(at('02:00', '2027-01-01'), h(16), h(23), h(0, 30), $we, $special)['active'], 'Silvester: um 2:00 aus');
+check(DekoLogic::Evening(at('23:30', '2026-12-24'), h(16), h(23), h(0, 30), [], $special)['special'] === 1224, 'Heiligabend erkannt (Donnerstag, kein Wochenende)');
+$x = ['2026-11-05' => 7200];
+$e = DekoLogic::Evening(at('00:30', '2026-11-06'), h(16), h(23), h(23), [], [], $x);
+check($e['active'] && $e['day'] === '2026-11-05' && $e['extended'] === 7200 && $e['off'] === h(1), '+2 h: 23:00 wird 01:00, 0:30 noch an');
+check(!DekoLogic::Evening(at('01:00', '2026-11-06'), h(16), h(23), h(23), [], [], $x)['active'], '+2 h: um 1:00 aus');
+check(DekoLogic::Evening(at('23:30', '2026-11-06'), h(16), h(23), h(23), [], [], $x)['off'] === h(23), 'Verlängerung gilt nur für den einen Abend');
+$e = DekoLogic::Evening(at('17:00'), h(16), h(15), h(15), [], [], ['2026-11-05' => 7200]);
+check($e['off'] === h(15, 59), 'Verlängerung endet höchstens kurz vor der Einschaltzeit');
+
 // Morgenfenster
 $sunrise = at('07:40');
 check(DekoLogic::Morning(at('06:30'), h(6), h(8), $sunrise)['active'], 'Morgens 6:30 aktiv');

@@ -85,35 +85,54 @@ final class DekoLogic
     /**
      * Abendfenster. Jeder Abend gehört zu dem Tag, an dem er beginnt („Schaltabend“);
      * liegt das Ende nach Mitternacht, gehört 0:00 bis zum Ende noch zum Vortag.
-     * An den Abenden in $weekendDays (ISO-Wochentag des Abends, 1 = Montag … 7 = Sonntag)
-     * gilt die Ausschaltzeit $offWeekend.
      *
-     * @return array{active: bool, on: int, off: int, overMidnight: bool, day: string, weekend: bool}
+     * Ausschaltzeit eines Abends, in dieser Reihenfolge:
+     *  - Sondertag ($special: MMTT => Sekunden, z. B. 1231 => 7200 für Silvester bis 02:00)
+     *  - Wochenende ($weekendDays: ISO-Wochentag des Abends, 1 = Montag … 7 = Sonntag)
+     *  - normale Ausschaltzeit
+     * Dazu kommt eine einmalige Verlängerung ($extra: 'JJJJ-MM-TT' => Sekunden), höchstens bis kurz vor der Einschaltzeit.
+     *
+     * @return array{active: bool, on: int, off: int, overMidnight: bool, day: string, weekend: bool, special: int, extended: int}
      */
-    public static function Evening(int $now, int $on, int $off, int $offWeekend, array $weekendDays): array
+    public static function Evening(int $now, int $on, int $off, int $offWeekend, array $weekendDays, array $special = [], array $extra = []): array
     {
         $sec = self::Seconds($now);
         $today = date('Y-m-d', $now);
         $yesterday = date('Y-m-d', mktime(12, 0, 0, (int) date('n', $now), (int) date('j', $now) - 1, (int) date('Y', $now)));
-        $isWeekend = static fn (string $day): bool => in_array((int) date('N', (int) strtotime($day . ' 12:00')), $weekendDays, true);
+
+        $offFor = static function (string $day) use ($on, $off, $offWeekend, $weekendDays, $special, $extra): array {
+            $ts = (int) strtotime($day . ' 12:00');
+            $md = self::MonthDay($ts);
+            $weekend = in_array((int) date('N', $ts), $weekendDays, true);
+            $isSpecial = array_key_exists($md, $special);
+            $end = $isSpecial ? (int) $special[$md] : ($weekend ? $offWeekend : $off);
+            $add = max(0, (int) ($extra[$day] ?? 0));
+            if ($add > 0) {
+                $length = (($end - $on) % 86400 + 86400) % 86400;
+                $length = min($length + $add, 86400 - 60);
+                $end = ($on + $length) % 86400;
+            }
+            return ['off' => $end, 'weekend' => $weekend, 'special' => $isSpecial ? $md : 0, 'extended' => $add];
+        };
 
         // Abend von gestern, der über Mitternacht hinaus noch läuft
-        $offY = $isWeekend($yesterday) ? $offWeekend : $off;
-        if ($on > $offY && $sec < $offY) {
-            return ['active' => true, 'on' => $on, 'off' => $offY, 'overMidnight' => true, 'day' => $yesterday, 'weekend' => $isWeekend($yesterday)];
+        $y = $offFor($yesterday);
+        if ($on > $y['off'] && $sec < $y['off']) {
+            return ['active' => true, 'on' => $on, 'off' => $y['off'], 'overMidnight' => true, 'day' => $yesterday,
+                'weekend' => $y['weekend'], 'special' => $y['special'], 'extended' => $y['extended']];
         }
 
-        $weekend = $isWeekend($today);
-        $offT = $weekend ? $offWeekend : $off;
-        $over = $on > $offT;
-        $active = $on !== $offT && $sec >= $on && ($over || $sec < $offT);
-        return ['active' => $active, 'on' => $on, 'off' => $offT, 'overMidnight' => $over, 'day' => $today, 'weekend' => $weekend];
+        $t = $offFor($today);
+        $over = $on > $t['off'];
+        $active = $on !== $t['off'] && $sec >= $on && ($over || $sec < $t['off']);
+        return ['active' => $active, 'on' => $on, 'off' => $t['off'], 'overMidnight' => $over, 'day' => $today,
+            'weekend' => $t['weekend'], 'special' => $t['special'], 'extended' => $t['extended']];
     }
 
     /**
      * Morgenfenster von $from bis $to, auf Wunsch schon mit Sonnenaufgang zu Ende ($sunrise, 0 = ohne).
      *
-     * @return array{active: bool, on: int, off: int, overMidnight: bool, day: string, weekend: bool}
+     * @return array{active: bool, on: int, off: int, overMidnight: bool, day: string, weekend: bool, special: int, extended: int}
      */
     public static function Morning(int $now, int $from, int $to, int $sunrise): array
     {
@@ -123,7 +142,7 @@ final class DekoLogic
             $end = min($end, self::Seconds($sunrise));
         }
         $active = $from < $end && $sec >= $from && $sec < $end;
-        return ['active' => $active, 'on' => $from, 'off' => $end, 'overMidnight' => false, 'day' => date('Y-m-d', $now) . '-m', 'weekend' => false];
+        return ['active' => $active, 'on' => $from, 'off' => $end, 'overMidnight' => false, 'day' => date('Y-m-d', $now) . '-m', 'weekend' => false, 'special' => 0, 'extended' => 0];
     }
 
     /** Erster Advent (Sonntag, vier Wochen vor dem letzten Sonntag vor Weihnachten) als Zeitstempel 0:00 Uhr */

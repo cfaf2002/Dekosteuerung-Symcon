@@ -69,6 +69,12 @@ class Dekosteuerung extends IPSModuleStrict
         $this->RegisterPropertyBoolean('MorningWorkdays', false);
         $this->RegisterPropertyInteger('SunriseVariableID', 0);
 
+        // Sondertage mit eigener Ausschaltzeit (Spalten: Name, Day, Month, OffTime)
+        $this->RegisterPropertyString('SpecialDays', json_encode([
+            ['Name' => 'Heiligabend', 'Day' => 24, 'Month' => 12, 'OffTime' => '01:00'],
+            ['Name' => 'Silvester', 'Day' => 31, 'Month' => 12, 'OffTime' => '02:00'],
+        ]));
+
         // Saison
         $this->RegisterPropertyInteger('SeasonMode', 0);
         $this->RegisterPropertyInteger('SeasonStartDay', 15);
@@ -103,6 +109,7 @@ class Dekosteuerung extends IPSModuleStrict
         $this->RegisterAttributeString('PendingTarget', '');
         $this->RegisterAttributeInteger('PendingAt', 0);
         $this->RegisterAttributeString('LampOffDay', '');
+        $this->RegisterAttributeString('ExtendDay', '');
         $this->RegisterAttributeString('LampOffDone', '[]');
         $this->RegisterAttributeString('TileData', '{}');
         $this->RegisterAttributeString('Watched', '[]');
@@ -193,6 +200,10 @@ class Dekosteuerung extends IPSModuleStrict
                 $this->Reevaluate();
                 return;
 
+            case 'Extend':
+                $this->SetExtend((int) $Value);
+                return;
+
             case 'LuxOn':
             case 'LuxOff':
                 $this->SetThreshold($Ident, (int) $Value);
@@ -233,6 +244,16 @@ class Dekosteuerung extends IPSModuleStrict
     {
         $this->SwitchLamps(array_fill_keys($this->LightIDs(), $On));
         $this->PushTile(null, null);
+        return true;
+    }
+
+    /**
+     * Heutigen Abend verlängern (DEKO_ExtendTonight), Minuten: 0 = normal, sonst z. B. 30, 60, 120, 180.
+     * Gilt nur für diesen einen Abend; ist er schon zu Ende, wird er wieder geöffnet.
+     */
+    public function ExtendTonight(int $Minutes): bool
+    {
+        $this->SetExtend($Minutes);
         return true;
     }
 
@@ -392,12 +413,19 @@ class Dekosteuerung extends IPSModuleStrict
     {
         $sec = DekoLogic::Seconds($now);
 
-        // Zeitfenster: Abend (mit Wochenende) und Morgen
-        $evOn = DekoLogic::Seconds((int) $this->GetValue('TimeOn'));
-        $evOff = DekoLogic::Seconds((int) $this->GetValue('TimeOff'));
-        $weekendMode = $this->ReadPropertyInteger('WeekendMode');
-        $evOffWeekend = $weekendMode > 0 && $this->VariableID('TimeOffWeekend') > 0 ? DekoLogic::Seconds((int) $this->GetValue('TimeOffWeekend')) : $evOff;
-        $evening = DekoLogic::Evening($now, $evOn, $evOff, $evOffWeekend, self::WEEKEND_DAYS[$weekendMode] ?? []);
+        // Zeitfenster: Abend (mit Wochenende, Sondertagen und „Heute länger“) und Morgen
+        [$evOn, $evOff, $evOffWeekend, $weekendDays, $special] = $this->EveningParams();
+        [, $specialNames] = $this->SpecialDays();
+        $extendDay = $this->ReadAttributeString('ExtendDay');
+        $extendMin = $this->VariableID('Extend') > 0 ? (int) $this->GetValue('Extend') : 0;
+        $extra = ($extendDay !== '' && $extendMin > 0) ? [$extendDay => $extendMin * 60] : [];
+        $evening = DekoLogic::Evening($now, $evOn, $evOff, $evOffWeekend, $weekendDays, $special, $extra);
+        if ($extendDay !== '' && $extendDay < $evening['day']) {
+            // Der verlängerte Abend ist vorbei: zurück auf normal
+            $this->WriteAttributeString('ExtendDay', '');
+            $this->SetValueIfChanged('Extend', 0);
+            $evening = DekoLogic::Evening($now, $evOn, $evOff, $evOffWeekend, $weekendDays, $special);
+        }
 
         $sunrise = $this->SunTime('Sunrise', 'SunriseVariableID', $now, 0);
         $morning = null;
@@ -471,6 +499,8 @@ class Dekosteuerung extends IPSModuleStrict
             'windowOff'      => $window['off'],
             'overMidnight'   => $window['overMidnight'],
             'weekend'        => $window['weekend'],
+            'specialName'    => $window['special'] > 0 ? (string) ($specialNames[$window['special']] ?? '') : '',
+            'extended'       => intdiv($window['extended'], 60),
             'eveningOn'      => $evOn,
             'nextOn'         => DekoLogic::Clock($nextOn),
             'morning'        => $isMorning,
@@ -500,6 +530,62 @@ class Dekosteuerung extends IPSModuleStrict
             'onSince'        => $this->ReadAttributeInteger('OnSince'),
             'minRun'         => max(0, $this->ReadPropertyInteger('MinOnMinutes')) * 60,
         ];
+    }
+
+    /** Sondertage aus der Liste: MMTT => Ausschaltzeit (Sekunden) und MMTT => Name */
+    private function SpecialDays(): array
+    {
+        $off = [];
+        $names = [];
+        foreach (json_decode($this->ReadPropertyString('SpecialDays'), true) ?: [] as $row) {
+            $day = (int) ($row['Day'] ?? 0);
+            $month = (int) ($row['Month'] ?? 0);
+            $sec = DekoLogic::ParseClock((string) ($row['OffTime'] ?? ''));
+            if ($sec === null || !checkdate($month, $day, 2024)) {
+                continue;
+            }
+            $off[$month * 100 + $day] = $sec;
+            $names[$month * 100 + $day] = trim((string) ($row['Name'] ?? '')) ?: sprintf('%02d.%02d.', $day, $month);
+        }
+        return [$off, $names];
+    }
+
+    /** Werte für das Abendfenster: Einschaltzeit, Ausschaltzeiten, Wochenend-Abende, Sondertage */
+    private function EveningParams(): array
+    {
+        $evOn = DekoLogic::Seconds((int) $this->GetValue('TimeOn'));
+        $evOff = DekoLogic::Seconds((int) $this->GetValue('TimeOff'));
+        $weekendMode = $this->ReadPropertyInteger('WeekendMode');
+        $evOffWeekend = $weekendMode > 0 && $this->VariableID('TimeOffWeekend') > 0 ? DekoLogic::Seconds((int) $this->GetValue('TimeOffWeekend')) : $evOff;
+        [$special] = $this->SpecialDays();
+        return [$evOn, $evOff, $evOffWeekend, self::WEEKEND_DAYS[$weekendMode] ?? [], $special];
+    }
+
+    /** „Heute länger“: Verlängerung für den laufenden oder kommenden Abend setzen */
+    private function SetExtend(int $minutes): void
+    {
+        $minutes = max(0, min(360, $minutes));
+        $this->SetValueIfChanged('Extend', $minutes);
+        if ($minutes === 0) {
+            $this->WriteAttributeString('ExtendDay', '');
+            $this->Reevaluate();
+            return;
+        }
+        $now = $this->Now();
+        [$on, $off, $offWe, $weDays, $special] = $this->EveningParams();
+        $evening = DekoLogic::Evening($now, $on, $off, $offWe, $weDays, $special);
+        $day = $evening['day'];
+        $sec = DekoLogic::Seconds($now);
+        if (!$evening['active'] && $sec < $on && $sec < 6 * 3600) {
+            // Kurz nach Mitternacht: gemeint ist der Abend, der gerade zu Ende gegangen ist
+            $day = date('Y-m-d', mktime(12, 0, 0, (int) date('n', $now), (int) date('j', $now) - 1, (int) date('Y', $now)));
+        }
+        $this->WriteAttributeString('ExtendDay', $day);
+        // Abend schon vorbei? Dann darf die Automatik an diesem Abend noch einmal einschalten
+        if (!$evening['active'] && $this->ReadAttributeString('OnDay') === $day) {
+            $this->WriteAttributeString('OnDay', '');
+        }
+        $this->Reevaluate();
     }
 
     /** Merkt sich den Beginn eines Sensorausfalls und meldet ihn auf Wunsch einmal */
@@ -606,6 +692,19 @@ class Dekosteuerung extends IPSModuleStrict
                 $this->SetValue('TimeOffWeekend', mktime(0, 30, 0));
             }
         }
+
+        $this->MaintainVariable('Extend', $this->Translate('Longer tonight'), VARIABLETYPE_INTEGER, [
+            'PRESENTATION' => VARIABLE_PRESENTATION_ENUMERATION,
+            'ICON'         => 'clock-rotate-left',
+            'OPTIONS'      => json_encode([
+                ['Value' => 0, 'Caption' => $this->Translate('Normal'), 'IconActive' => false, 'IconValue' => '', 'Color' => -1],
+                ['Value' => 30, 'Caption' => '+30 min', 'IconActive' => false, 'IconValue' => '', 'Color' => -1],
+                ['Value' => 60, 'Caption' => '+1 h', 'IconActive' => false, 'IconValue' => '', 'Color' => -1],
+                ['Value' => 120, 'Caption' => '+2 h', 'IconActive' => false, 'IconValue' => '', 'Color' => -1],
+                ['Value' => 180, 'Caption' => '+3 h', 'IconActive' => false, 'IconValue' => '', 'Color' => -1],
+            ]),
+        ], 53, true);
+        $this->EnableAction('Extend');
 
         $slider = static fn (string $icon): array => [
             'PRESENTATION' => VARIABLE_PRESENTATION_SLIDER,
@@ -725,6 +824,11 @@ class Dekosteuerung extends IPSModuleStrict
         if ($this->ReadPropertyBoolean('MorningEnabled') && $this->TimeProperty('MorningFrom') >= $this->TimeProperty('MorningTo')) {
             return 205;
         }
+        foreach (json_decode($this->ReadPropertyString('SpecialDays'), true) ?: [] as $row) {
+            if (DekoLogic::ParseClock((string) ($row['OffTime'] ?? '')) === null || !checkdate((int) ($row['Month'] ?? 0), (int) ($row['Day'] ?? 0), 2024)) {
+                return 207;
+            }
+        }
         if ($this->ReadPropertyInteger('SeasonMode') > 0) {
             $ok = checkdate($this->ReadPropertyInteger('SeasonEndMonth'), $this->ReadPropertyInteger('SeasonEndDay'), 2024)
                 && ($this->ReadPropertyInteger('SeasonMode') === 2 || checkdate($this->ReadPropertyInteger('SeasonStartMonth'), $this->ReadPropertyInteger('SeasonStartDay'), 2024));
@@ -824,6 +928,7 @@ class Dekosteuerung extends IPSModuleStrict
         $data['minRun'] = max(0, $this->ReadPropertyInteger('MinOnMinutes')) * 60;
         $data['luxOn'] = (int) $this->GetValue('LuxOn');
         $data['luxOff'] = (int) $this->GetValue('LuxOff');
+        $data['extend'] = $this->VariableID('Extend') > 0 ? (int) $this->GetValue('Extend') : 0;
 
         if ($ctx !== null && $result !== null) {
             $data['status'] = $result['status'];
@@ -834,6 +939,8 @@ class Dekosteuerung extends IPSModuleStrict
             $data['window'] = $ctx['windowActive'];
             $data['morningWindow'] = $ctx['morning'];
             $data['weekend'] = $ctx['weekend'];
+            $data['specialName'] = $ctx['specialName'];
+            $data['extended'] = $ctx['extended'];
             $data['overMidnight'] = $ctx['overMidnight'];
             $data['inSeason'] = $ctx['inSeason'];
             $data['seasonStart'] = $ctx['seasonStart'];
@@ -901,6 +1008,8 @@ class Dekosteuerung extends IPSModuleStrict
             'window'        => $ctx['windowActive'],
             'morning'       => $ctx['morning'],
             'weekend'       => $ctx['weekend'],
+            'specialName'   => $ctx['specialName'],
+            'extended'      => $ctx['extended'],
             'overMidnight'  => $ctx['overMidnight'],
             'windowOn'      => DekoLogic::Clock($ctx['windowOn']),
             'windowOff'     => DekoLogic::Clock($ctx['windowOff']),
@@ -959,6 +1068,7 @@ class Dekosteuerung extends IPSModuleStrict
             204     => $this->Translate('A switch-off time in the light list is invalid (HH:MM)'),
             205     => $this->Translate('Morning window: start must be before end'),
             206     => $this->Translate('Season: invalid date'),
+            207     => $this->Translate('Special days: invalid date or switch-off time (HH:MM)'),
             default => $this->Translate('Not configured'),
         };
     }

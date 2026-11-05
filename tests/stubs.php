@@ -214,6 +214,28 @@ try {
     IPS_SetProperty($id, 'VacationMode', 0);
     IPS_ApplyChanges($id);
 
+    // Version 2.2: „Heute länger“ öffnet einen gerade beendeten Abend wieder
+    ok(@IPS_GetObjectIDByIdent('Extend', $id) !== false, 'Variable Heute länger');
+    RequestAction(own($id, 'AllowMultiple'), false);
+    RequestAction(own($id, 'TimeOff'), time() - 600);
+    ok(GetValue($lamp2) === false, 'Abend vorbei: Lampen aus');
+    RequestAction(own($id, 'Extend'), 60);
+    ok(GetValue(own($id, 'Extend')) === 60 && GetValue($lamp2) === true, '+1 h: Abend wieder offen, Lampen an');
+    RequestAction(own($id, 'Extend'), 0);
+    ok(GetValue($lamp2) === false, 'Zurück auf normal: Lampen aus');
+    ok(DEKO_ExtendTonight($id, 120) === true && GetValue($lamp2) === true, 'DEKO_ExtendTonight');
+    DEKO_ExtendTonight($id, 0);
+    RequestAction(own($id, 'TimeOff'), time() + 3600);
+
+    // Sondertage: ungültige Zeile melden
+    IPS_SetProperty($id, 'SpecialDays', json_encode([['Name' => 'Test', 'Day' => 31, 'Month' => 2, 'OffTime' => '01:00']]));
+    IPS_ApplyChanges($id);
+    ok(IPS_GetInstance($id)['InstanceStatus'] === 207, 'Sondertag mit 31.02.: Status 207');
+    IPS_SetProperty($id, 'SpecialDays', json_encode([['Name' => 'Heute', 'Day' => (int) date('j'), 'Month' => (int) date('n'), 'OffTime' => '23:59']]));
+    IPS_ApplyChanges($id);
+    ok(IPS_GetInstance($id)['InstanceStatus'] === 102, 'Gültiger Sondertag: Status 102');
+    ok(str_contains(DEKO_GetVisualizationTile($id), '"specialName":"Heute"') || (int) date('G') < 1, 'Sondertag in der Kachel');
+
     // Benachrichtigung ohne Visualisierung: kein Absturz
     ob_start();
     IPS_RequestAction($id, 'TestNotify', 0);

@@ -2,7 +2,7 @@
 
 [![IP-Symcon ab 8.1](https://img.shields.io/badge/IP--Symcon-ab_8.1-0b6fb3.svg)](https://www.symcon.de)
 [![Optimiert für Symcon 9.0](https://img.shields.io/badge/optimiert_f%C3%BCr-Symcon_9.0-0b6fb3.svg)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
-[![Modul-Version 2.1 (Build 5)](https://img.shields.io/badge/Modul--Version-2.1_(Build_5)-informational.svg)](library.json)
+[![Modul-Version 2.2 (Build 6)](https://img.shields.io/badge/Modul--Version-2.2_(Build_6)-informational.svg)](library.json)
 [![Tests](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml/badge.svg)](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml)
 [![PHP 8.3 und 8.5](https://img.shields.io/badge/PHP-8.3_%7C_8.5-777bb4.svg?logo=php&logoColor=white)](https://www.php.net)
 [![SDK: IPSModuleStrict](https://img.shields.io/badge/SDK-IPSModuleStrict-success.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/module/)
@@ -43,6 +43,8 @@ Autor: Armin Frohwerk · Lizenz: MIT
 - **Einschalten** im Zeitfenster (auch über Mitternacht), wenn es dunkler als die Einschaltgrenze ist **oder** der Sonnenuntergang erreicht ist (Versatz einstellbar).
 - **Ausschalten** am Ende des Zeitfensters, bei Abwesenheit oder wenn es dauerhaft heller als die Ausschaltgrenze ist (z. B. 3 der letzten 5 Messwerte). Bei Abwesenheit und Helligkeit gilt eine **Mindestlaufzeit**.
 - **Wochenende:** eigene Ausschaltzeit für Freitag- und Samstagabend (oder Samstag/Sonntag).
+- **Sondertage:** eigene Ausschaltzeit für bestimmte Tage, vorbelegt mit Heiligabend (01:00) und Silvester (02:00); eigene Anlässe ergänzbar. Ein Sondertag geht dem Wochenende vor.
+- **Heute länger:** Knopf in der Kachel (und Variable) verlängert nur den heutigen Abend um 30 Minuten bis 3 Stunden – auch dann, wenn er gerade zu Ende gegangen ist. Danach gilt automatisch wieder die normale Zeit.
 - **Morgenfenster:** auf Wunsch auch morgens einschalten, solange es dunkel ist – bis zu einer festen Zeit oder bis Sonnenaufgang, auf Wunsch nur werktags.
 - **Saison:** ganzjährig, in einem Datumsbereich (auch über den Jahreswechsel) oder automatisch ab dem 1. Advent bis zu einem Enddatum.
 - **Urlaub:** sperrt das Einschalten – oder simuliert Anwesenheit: Das Licht geht wie gewohnt an und aus, aber mit zufälligem Versatz.
@@ -107,6 +109,7 @@ Beim ersten Lauf nach dem Anlegen wird ein Ziel „aus“ nur gemerkt, nicht ges
 | | Auch bei Sonnenuntergang einschalten | an |
 | | Sonnenuntergang-Variable (leer = aus Kern Instanzen → Location), Versatz | leer, 0 min |
 | Zeiten und Saison | Eigene Ausschaltzeit für die Abende von … (Freitag/Samstag, Samstag/Sonntag, Freitag–Sonntag) | keine |
+| | Sondertage: Name, Tag, Monat, Aus um (HH:MM) | Heiligabend 24.12. 01:00, Silvester 31.12. 02:00 |
 | | Morgenfenster: von, spätestens bis, mit Sonnenaufgang beenden, nur Montag–Freitag | aus · 06:00 · 08:00 · an · aus |
 | | Sonnenaufgang-Variable (leer = aus Location) | leer |
 | | Saison: ganzjährig, Datumsbereich, ab dem 1. Advent; Beginn und Ende (Tag, Monat) | ganzjährig · 15.11. · 06.01. |
@@ -123,8 +126,9 @@ Zeiten, Grenzwerte und die Schalter „Anwesenheit erzwingen“ und „Mehrfachs
 
 - Kopfzeile mit Status, Begründung (bei „Licht an“: warum und seit wann) und Schalter für alle Lampen
 - Lampen einzeln mit „x von y an“; lange Namen werden gekürzt (voller Name beim Darüberfahren)
-- Helligkeit mit Trend (↗ ↘ →) und Balken mit Ein- und Ausschaltgrenze, Sonnenuntergang (im Morgenfenster Sonnenaufgang) mit Countdown, aktives Zeitfenster (Abend, Wochenende oder Morgen), Restzeit der Mindestlaufzeit
+- Helligkeit mit Trend (↗ ↘ →) und Balken mit Ein- und Ausschaltgrenze, Sonnenuntergang (im Morgenfenster Sonnenaufgang) mit Countdown, aktives Zeitfenster (Abend, Wochenende, Sondertag, Verlängerung oder Morgen), Restzeit der Mindestlaufzeit
 - Hinweise nur, wenn sie zutreffen: niemand anwesend, Anwesenheit erzwungen, Urlaub oder Urlaubssimulation, Tageslimit, dauerhaft hell
+- „Heute länger“: Normal, +30 min, +1 h, +2 h, +3 h
 - Schalter für Automatik, Anwesenheit erzwingen und Mehrfach
 - Kleine Kacheln zeigen nur Status, Werte und Schalter
 - **Details:** Der Knopf unten rechts öffnet eine Diagnose über der ganzen Kachel – Voraussetzungen, Auslöser (mit Messverlauf und Alter des Sensorwerts), Tagessteuerung, Ergebnis (Entscheidung, letztes Automatik-Ziel, Mindestlaufzeit), jede Lampe mit Zustand und Einstellungen sowie System. Schließen mit × oder Esc.
@@ -142,6 +146,7 @@ Die Kachel bekommt nur Daten (JSON) und setzt alle Texte per `textContent`. Der 
 | `Reason` | Letzte Entscheidung | String | Wertanzeige | – |
 | `TimeOn` | Einschaltzeitpunkt | Integer | `~UnixTimestampTime` | ja |
 | `TimeOff` | Ausschaltzeitpunkt | Integer | `~UnixTimestampTime` | ja |
+| `Extend` | Heute länger (Normal, +30 min, +1 h, +2 h, +3 h; setzt sich nach dem Abend zurück) | Integer | Aufzählung | ja |
 | `TimeOffWeekend` | Ausschaltzeitpunkt Wochenende (nur mit Wochenend-Einstellung) | Integer | `~UnixTimestampTime` | ja |
 | `LuxOn` | Dämmerung Einschaltgrenze | Integer | Schieberegler (lx) | ja |
 | `LuxOff` | Dämmerung Ausschaltgrenze | Integer | Schieberegler (lx) | ja |
@@ -156,6 +161,7 @@ Status-Werte: 0 Automatik aus · 1 Warte auf Dämmerung · 2 Licht an · 3 Auße
 DEKO_Evaluate(int $InstanceID): bool                 // sofort prüfen
 DEKO_SetLights(int $InstanceID, bool $On): bool      // alle Lampen von Hand schalten
 DEKO_SetAutomatic(int $InstanceID, bool $Active): void  // Automatik ein/aus
+DEKO_ExtendTonight(int $InstanceID, int $Minutes): bool  // heute länger, 0 = normal
 ```
 
 ## 9. Umstieg vom bisherigen Skript
@@ -181,6 +187,7 @@ DEKO_SetAutomatic(int $InstanceID, bool $Active): void  // Automatik ein/aus
 
 | Version | Build | Datum | Beschreibung |
 |---|---|---|---|
+| 2.2 | 6 | 05.11.2026 | Sondertage mit eigener Ausschaltzeit (vorbelegt: Heiligabend, Silvester); „Heute länger“ in Kachel und Variable verlängert nur den aktuellen Abend und setzt sich selbst zurück |
 | 2.1 | 5 | 05.11.2026 | Kachel: Knopf „Details“ öffnet eine Diagnose-Ansicht mit allen Bedingungen, Auslösern, der Tageslogik, dem Ergebnis, den Lampen und dem System |
 | 2.0 | 4 | 05.11.2026 | Saison (Datumsbereich oder ab 1. Advent), Morgenfenster bis Sonnenaufgang, eigene Ausschaltzeit am Wochenende, Urlaub mit Anwesenheitssimulation (Zufallsversatz), je Lampe eigene Ausschaltzeit und Morgen-Teilnahme, Dimmer, Benachrichtigung bei fehlender Rückmeldung oder Sensorausfall |
 | 1.2 | 3 | 05.11.2026 | Kachel kompakter: Lichtschalter in der Kopfzeile, „x von y an“, Werte in einer flachen Reihe, nur zutreffende Hinweise, kurze Schalter; bei „Licht an“ Grund und Uhrzeit; passt sich kleinen und schmalen Kacheln an |

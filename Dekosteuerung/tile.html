@@ -131,6 +131,16 @@
         .value { font-size: 15px; }
         .card { padding: 7px 8px; }
     }
+    /* Heute länger */
+    .extend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .extend .label { margin-right: 2px; }
+    .ext {
+        min-height: 36px; min-width: 56px; padding: 4px 12px; border-radius: var(--pill); border: 1px solid var(--line);
+        background: var(--surface); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer;
+    }
+    .ext:hover { background: var(--surface-hover); }
+    .ext[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+
     /* Fußzeile mit Knopf für die Diagnose */
     .footer { display: flex; align-items: center; gap: 8px; }
     .footer .foot { flex: 1; min-width: 0; }
@@ -166,7 +176,7 @@
 
     /* Kleine Kachel: nur Status, Werte und Schalter */
     @media (max-height: 340px) {
-        .lamps, .chips, .foot { display: none; }
+        .lamps, .chips, .foot, .extend { display: none; }
         .footer { justify-content: flex-end; }
     }
     @media (max-height: 240px) {
@@ -214,6 +224,15 @@
             <div class="value" id="run">–</div>
             <div class="bar progress"><div class="fill" id="runFill"></div></div>
         </div>
+    </div>
+
+    <div class="extend" id="extend">
+        <span class="label" data-t="Longer tonight">Longer tonight</span>
+        <button class="ext" type="button" data-min="0" data-t="Normal">Normal</button>
+        <button class="ext" type="button" data-min="30">+30 min</button>
+        <button class="ext" type="button" data-min="60">+1 h</button>
+        <button class="ext" type="button" data-min="120">+2 h</button>
+        <button class="ext" type="button" data-min="180">+3 h</button>
     </div>
 
     <div class="chips" id="chips"></div>
@@ -390,7 +409,15 @@
             // Zeitfenster
             setText('window', (d.timeOn || '–') + '–' + (d.timeOff || '–'));
             setText('windowLabel', t(d.morningWindow ? 'Morning window' : 'Time window'));
-            setText('windowSub', (d.window ? t('active') : t('not active')) + (d.weekend ? ' · ' + t('weekend') : '') + (d.overMidnight ? ' · ' + t('over midnight') : ''));
+            setText('windowSub', (d.window ? t('active') : t('not active'))
+                + (d.specialName ? ' · ' + d.specialName : (d.weekend ? ' · ' + t('weekend') : ''))
+                + (d.extended ? ' · +' + (d.extended % 60 ? d.extended + ' min' : d.extended / 60 + ' h') : ''));
+
+            // Heute länger: nur im Abend und davor sinnvoll, nicht im Morgenfenster
+            $('extend').hidden = !!d.morningWindow;
+            Array.prototype.forEach.call(document.querySelectorAll('.ext'), function (el) {
+                el.setAttribute('aria-pressed', String(Number(el.getAttribute('data-min')) === (d.extend || 0)));
+            });
 
             // Bedingungen
             var chips = $('chips');
@@ -501,6 +528,8 @@
                 [t(D.morning ? 'Morning window' : 'Time window'), D.windowOn + '–' + D.windowOff],
                 [t('Time window active'), D.window],
                 [t('Weekend'), D.weekend],
+                [t('Special day'), D.specialName ? [true, D.specialName] : false],
+                [t('Longer tonight'), D.extended ? '+' + D.extended + ' min' : t('Normal')],
                 [t('Over midnight'), D.overMidnight],
                 [t('Present (total)'), D.present],
                 [t('Presence sensor'), D.presenceSensor === null ? t('none (always present)') : D.presenceSensor],
@@ -636,6 +665,12 @@
         Array.prototype.forEach.call(document.querySelectorAll('.toggle'), function (el) {
             el.addEventListener('click', function () {
                 send(el.getAttribute('data-ident'), el.getAttribute('aria-checked') !== 'true');
+            });
+        });
+
+        Array.prototype.forEach.call(document.querySelectorAll('.ext'), function (el) {
+            el.addEventListener('click', function () {
+                send('Extend', Number(el.getAttribute('data-min')));
             });
         });
 

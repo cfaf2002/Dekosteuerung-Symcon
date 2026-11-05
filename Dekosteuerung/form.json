@@ -30,7 +30,11 @@
                             "edit": {
                                 "type": "SelectVariable",
                                 "requiredAction": 1,
-                                "validVariableTypes": [0, 1, 2]
+                                "validVariableTypes": [
+                                    0,
+                                    1,
+                                    2
+                                ]
                             }
                         },
                         {
@@ -158,15 +162,131 @@
                     "caption": "Own switch-off time for the evenings of",
                     "width": "400px",
                     "options": [
-                        { "caption": "– none –", "value": 0 },
-                        { "caption": "Friday and Saturday", "value": 1 },
-                        { "caption": "Saturday and Sunday", "value": 2 },
-                        { "caption": "Friday, Saturday and Sunday", "value": 3 }
+                        {
+                            "caption": "– none –",
+                            "value": 0
+                        },
+                        {
+                            "caption": "Friday and Saturday",
+                            "value": 1
+                        },
+                        {
+                            "caption": "Saturday and Sunday",
+                            "value": 2
+                        },
+                        {
+                            "caption": "Friday, Saturday and Sunday",
+                            "value": 3
+                        }
                     ]
                 },
                 {
                     "type": "Label",
                     "caption": "The weekend switch-off time is the instance variable \"Switch-off time at the weekend\"."
+                },
+                {
+                    "type": "List",
+                    "name": "SpecialDays",
+                    "caption": "Special days with their own switch-off time (apply to the evening of that day)",
+                    "rowCount": 4,
+                    "add": true,
+                    "delete": true,
+                    "columns": [
+                        {
+                            "caption": "Name",
+                            "name": "Name",
+                            "width": "auto",
+                            "add": "",
+                            "edit": {
+                                "type": "ValidationTextBox"
+                            }
+                        },
+                        {
+                            "caption": "Day",
+                            "name": "Day",
+                            "width": "90px",
+                            "add": 1,
+                            "edit": {
+                                "type": "NumberSpinner",
+                                "minimum": 1,
+                                "maximum": 31
+                            }
+                        },
+                        {
+                            "caption": "Month",
+                            "name": "Month",
+                            "width": "150px",
+                            "add": 12,
+                            "edit": {
+                                "type": "Select",
+                                "options": [
+                                    {
+                                        "caption": "January",
+                                        "value": 1
+                                    },
+                                    {
+                                        "caption": "February",
+                                        "value": 2
+                                    },
+                                    {
+                                        "caption": "March",
+                                        "value": 3
+                                    },
+                                    {
+                                        "caption": "April",
+                                        "value": 4
+                                    },
+                                    {
+                                        "caption": "May",
+                                        "value": 5
+                                    },
+                                    {
+                                        "caption": "June",
+                                        "value": 6
+                                    },
+                                    {
+                                        "caption": "July",
+                                        "value": 7
+                                    },
+                                    {
+                                        "caption": "August",
+                                        "value": 8
+                                    },
+                                    {
+                                        "caption": "September",
+                                        "value": 9
+                                    },
+                                    {
+                                        "caption": "October",
+                                        "value": 10
+                                    },
+                                    {
+                                        "caption": "November",
+                                        "value": 11
+                                    },
+                                    {
+                                        "caption": "December",
+                                        "value": 12
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "caption": "Off at (HH:MM)",
+                            "name": "OffTime",
+                            "width": "150px",
+                            "add": "00:30",
+                            "edit": {
+                                "type": "ValidationTextBox",
+                                "validate": "^([01]?[0-9]|2[0-3])[:.][0-5][0-9]$"
+                            }
+                        }
+                    ],
+                    "values": []
+                },
+                {
+                    "type": "Label",
+                    "caption": "A special day takes precedence over the weekend. \"Longer tonight\" (variable and tile) extends only the current evening by 30 minutes up to 3 hours and resets itself afterwards."
                 },
                 {
                     "type": "CheckBox",
@@ -215,9 +335,18 @@
                     "caption": "Season",
                     "width": "400px",
                     "options": [
-                        { "caption": "All year round", "value": 0 },
-                        { "caption": "Date range", "value": 1 },
-                        { "caption": "From the 1st Advent", "value": 2 }
+                        {
+                            "caption": "All year round",
+                            "value": 0
+                        },
+                        {
+                            "caption": "Date range",
+                            "value": 1
+                        },
+                        {
+                            "caption": "From the 1st Advent",
+                            "value": 2
+                        }
                     ]
                 },
                 {
@@ -235,18 +364,54 @@
                             "name": "SeasonStartMonth",
                             "caption": "Month",
                             "options": [
-                                { "caption": "January", "value": 1 },
-                                { "caption": "February", "value": 2 },
-                                { "caption": "March", "value": 3 },
-                                { "caption": "April", "value": 4 },
-                                { "caption": "May", "value": 5 },
-                                { "caption": "June", "value": 6 },
-                                { "caption": "July", "value": 7 },
-                                { "caption": "August", "value": 8 },
-                                { "caption": "September", "value": 9 },
-                                { "caption": "October", "value": 10 },
-                                { "caption": "November", "value": 11 },
-                                { "caption": "December", "value": 12 }
+                                {
+                                    "caption": "January",
+                                    "value": 1
+                                },
+                                {
+                                    "caption": "February",
+                                    "value": 2
+                                },
+                                {
+                                    "caption": "March",
+                                    "value": 3
+                                },
+                                {
+                                    "caption": "April",
+                                    "value": 4
+                                },
+                                {
+                                    "caption": "May",
+                                    "value": 5
+                                },
+                                {
+                                    "caption": "June",
+                                    "value": 6
+                                },
+                                {
+                                    "caption": "July",
+                                    "value": 7
+                                },
+                                {
+                                    "caption": "August",
+                                    "value": 8
+                                },
+                                {
+                                    "caption": "September",
+                                    "value": 9
+                                },
+                                {
+                                    "caption": "October",
+                                    "value": 10
+                                },
+                                {
+                                    "caption": "November",
+                                    "value": 11
+                                },
+                                {
+                                    "caption": "December",
+                                    "value": 12
+                                }
                             ]
                         },
                         {
@@ -261,18 +426,54 @@
                             "name": "SeasonEndMonth",
                             "caption": "Month",
                             "options": [
-                                { "caption": "January", "value": 1 },
-                                { "caption": "February", "value": 2 },
-                                { "caption": "March", "value": 3 },
-                                { "caption": "April", "value": 4 },
-                                { "caption": "May", "value": 5 },
-                                { "caption": "June", "value": 6 },
-                                { "caption": "July", "value": 7 },
-                                { "caption": "August", "value": 8 },
-                                { "caption": "September", "value": 9 },
-                                { "caption": "October", "value": 10 },
-                                { "caption": "November", "value": 11 },
-                                { "caption": "December", "value": 12 }
+                                {
+                                    "caption": "January",
+                                    "value": 1
+                                },
+                                {
+                                    "caption": "February",
+                                    "value": 2
+                                },
+                                {
+                                    "caption": "March",
+                                    "value": 3
+                                },
+                                {
+                                    "caption": "April",
+                                    "value": 4
+                                },
+                                {
+                                    "caption": "May",
+                                    "value": 5
+                                },
+                                {
+                                    "caption": "June",
+                                    "value": 6
+                                },
+                                {
+                                    "caption": "July",
+                                    "value": 7
+                                },
+                                {
+                                    "caption": "August",
+                                    "value": 8
+                                },
+                                {
+                                    "caption": "September",
+                                    "value": 9
+                                },
+                                {
+                                    "caption": "October",
+                                    "value": 10
+                                },
+                                {
+                                    "caption": "November",
+                                    "value": 11
+                                },
+                                {
+                                    "caption": "December",
+                                    "value": 12
+                                }
                             ]
                         }
                     ]
@@ -314,8 +515,14 @@
                             "caption": "During vacation",
                             "width": "420px",
                             "options": [
-                                { "caption": "Block switching on (switching off still works)", "value": 0 },
-                                { "caption": "Simulate presence (switch with random delay)", "value": 1 }
+                                {
+                                    "caption": "Block switching on (switching off still works)",
+                                    "value": 0
+                                },
+                                {
+                                    "caption": "Simulate presence (switch with random delay)",
+                                    "value": 1
+                                }
                             ]
                         },
                         {
@@ -391,9 +598,18 @@
                     "name": "TileTheme",
                     "caption": "Colour scheme of the tile",
                     "options": [
-                        { "caption": "Symcon design (colours of the visualization)", "value": 0 },
-                        { "caption": "Dark", "value": 1 },
-                        { "caption": "Light", "value": 2 }
+                        {
+                            "caption": "Symcon design (colours of the visualization)",
+                            "value": 0
+                        },
+                        {
+                            "caption": "Dark",
+                            "value": 1
+                        },
+                        {
+                            "caption": "Light",
+                            "value": 2
+                        }
                     ]
                 }
             ]
@@ -449,14 +665,55 @@
         }
     ],
     "status": [
-        { "code": 102, "icon": "active", "caption": "Active" },
-        { "code": 104, "icon": "inactive", "caption": "Instance is inactive" },
-        { "code": 200, "icon": "error", "caption": "Please add the lights" },
-        { "code": 201, "icon": "error", "caption": "A light is missing or has no action" },
-        { "code": 202, "icon": "error", "caption": "A sensor variable does not exist" },
-        { "code": 203, "icon": "error", "caption": "No trigger: select a brightness sensor or use the sunset" },
-        { "code": 204, "icon": "error", "caption": "A switch-off time in the light list is invalid (HH:MM)" },
-        { "code": 205, "icon": "error", "caption": "Morning window: start must be before end" },
-        { "code": 206, "icon": "error", "caption": "Season: invalid date" }
+        {
+            "code": 102,
+            "icon": "active",
+            "caption": "Active"
+        },
+        {
+            "code": 104,
+            "icon": "inactive",
+            "caption": "Instance is inactive"
+        },
+        {
+            "code": 200,
+            "icon": "error",
+            "caption": "Please add the lights"
+        },
+        {
+            "code": 201,
+            "icon": "error",
+            "caption": "A light is missing or has no action"
+        },
+        {
+            "code": 202,
+            "icon": "error",
+            "caption": "A sensor variable does not exist"
+        },
+        {
+            "code": 203,
+            "icon": "error",
+            "caption": "No trigger: select a brightness sensor or use the sunset"
+        },
+        {
+            "code": 204,
+            "icon": "error",
+            "caption": "A switch-off time in the light list is invalid (HH:MM)"
+        },
+        {
+            "code": 205,
+            "icon": "error",
+            "caption": "Morning window: start must be before end"
+        },
+        {
+            "code": 206,
+            "icon": "error",
+            "caption": "Season: invalid date"
+        },
+        {
+            "code": 207,
+            "icon": "error",
+            "caption": "Special days: invalid date or switch-off time (HH:MM)"
+        }
     ]
 }
