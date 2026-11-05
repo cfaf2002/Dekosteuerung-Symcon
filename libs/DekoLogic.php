@@ -30,12 +30,40 @@ final class DekoLogic
     public const ST_LIMIT = 6;      // heute schon geschaltet, Mehrfach aus
     public const ST_BRIGHT = 7;     // dauerhaft hell
     public const ST_MINRUN = 8;     // Mindestlaufzeit läuft noch
+    public const ST_SEASON = 9;     // außerhalb der Saison
+    public const ST_PENDING = 10;   // Urlaubssimulation: Schaltung mit Zufallsversatz geplant
 
     public const TARGET_ON = 'on';
     public const TARGET_OFF = 'off';
 
-    /** Anzahl Messwerte im Verlauf und wie viele davon über der Ausschaltgrenze liegen müssen */
+    /** Anzahl Messwerte im Verlauf */
     public const HISTORY_SIZE = 5;
+
+    // =====================================================================
+    // Zeit
+    // =====================================================================
+
+    /** Sekunden seit Mitternacht (Ortszeit) */
+    public static function Seconds(int $ts): int
+    {
+        return (int) date('G', $ts) * 3600 + (int) date('i', $ts) * 60 + (int) date('s', $ts);
+    }
+
+    /** „HH:MM“ (oder „H:MM“) in Sekunden seit Mitternacht, null bei ungültiger Angabe */
+    public static function ParseClock(string $text): ?int
+    {
+        if (!preg_match('/^\s*([01]?\d|2[0-3])[:.]([0-5]\d)\s*$/', $text, $m)) {
+            return null;
+        }
+        return (int) $m[1] * 3600 + (int) $m[2] * 60;
+    }
+
+    /** Sekunden seit Mitternacht als „HH:MM“ */
+    public static function Clock(int $sec): string
+    {
+        $sec = (($sec % 86400) + 86400) % 86400;
+        return sprintf('%02d:%02d', intdiv($sec, 3600), intdiv($sec % 3600, 60));
+    }
 
     /**
      * Zeitfenster: aktiv und über Mitternacht?
@@ -55,22 +83,97 @@ final class DekoLogic
     }
 
     /**
-     * Schlüssel des „Schaltabends“. Liegt das Fenster über Mitternacht, gehört 00:00 bis zur
-     * Ausschaltzeit noch zum Vortag. Damit braucht es kein Tagesreset-Ereignis mehr.
+     * Abendfenster. Jeder Abend gehört zu dem Tag, an dem er beginnt („Schaltabend“);
+     * liegt das Ende nach Mitternacht, gehört 0:00 bis zum Ende noch zum Vortag.
+     * An den Abenden in $weekendDays (ISO-Wochentag des Abends, 1 = Montag … 7 = Sonntag)
+     * gilt die Ausschaltzeit $offWeekend.
+     *
+     * @return array{active: bool, on: int, off: int, overMidnight: bool, day: string, weekend: bool}
      */
-    public static function DayKey(int $now, int $sec, int $on, int $off): string
+    public static function Evening(int $now, int $on, int $off, int $offWeekend, array $weekendDays): array
     {
-        if ($on > $off && $sec < $off) {
-            $now -= 86400;
+        $sec = self::Seconds($now);
+        $today = date('Y-m-d', $now);
+        $yesterday = date('Y-m-d', mktime(12, 0, 0, (int) date('n', $now), (int) date('j', $now) - 1, (int) date('Y', $now)));
+        $isWeekend = static fn (string $day): bool => in_array((int) date('N', (int) strtotime($day . ' 12:00')), $weekendDays, true);
+
+        // Abend von gestern, der über Mitternacht hinaus noch läuft
+        $offY = $isWeekend($yesterday) ? $offWeekend : $off;
+        if ($on > $offY && $sec < $offY) {
+            return ['active' => true, 'on' => $on, 'off' => $offY, 'overMidnight' => true, 'day' => $yesterday, 'weekend' => $isWeekend($yesterday)];
         }
-        return date('Y-m-d', $now);
+
+        $weekend = $isWeekend($today);
+        $offT = $weekend ? $offWeekend : $off;
+        $over = $on > $offT;
+        $active = $on !== $offT && $sec >= $on && ($over || $sec < $offT);
+        return ['active' => $active, 'on' => $on, 'off' => $offT, 'overMidnight' => $over, 'day' => $today, 'weekend' => $weekend];
     }
 
-    /** Sekunden seit Mitternacht (Ortszeit) */
-    public static function Seconds(int $ts): int
+    /**
+     * Morgenfenster von $from bis $to, auf Wunsch schon mit Sonnenaufgang zu Ende ($sunrise, 0 = ohne).
+     *
+     * @return array{active: bool, on: int, off: int, overMidnight: bool, day: string, weekend: bool}
+     */
+    public static function Morning(int $now, int $from, int $to, int $sunrise): array
     {
-        return (int) date('G', $ts) * 3600 + (int) date('i', $ts) * 60 + (int) date('s', $ts);
+        $sec = self::Seconds($now);
+        $end = $to;
+        if ($sunrise > 0 && date('Y-m-d', $sunrise) === date('Y-m-d', $now)) {
+            $end = min($end, self::Seconds($sunrise));
+        }
+        $active = $from < $end && $sec >= $from && $sec < $end;
+        return ['active' => $active, 'on' => $from, 'off' => $end, 'overMidnight' => false, 'day' => date('Y-m-d', $now) . '-m', 'weekend' => false];
     }
+
+    /** Erster Advent (Sonntag, vier Wochen vor dem letzten Sonntag vor Weihnachten) als Zeitstempel 0:00 Uhr */
+    public static function FirstAdvent(int $year): int
+    {
+        $dow = (int) date('N', mktime(12, 0, 0, 12, 25, $year)); // 1 = Montag … 7 = Sonntag
+        $back = $dow === 7 ? 7 : $dow;                             // 4. Advent: Sonntag vor dem 25.12.
+        return mktime(0, 0, 0, 12, 25 - $back - 21, $year);
+    }
+
+    /**
+     * Liegt der Tag in der Saison?
+     * $mode: 0 = immer, 1 = von $startMd bis $endMd, 2 = vom 1. Advent bis $endMd.
+     * Monat/Tag als MMTT-Zahl, z. B. 1115 für den 15. November; über den Jahreswechsel möglich.
+     */
+    public static function InSeason(string $day, int $mode, int $startMd, int $endMd): bool
+    {
+        if ($mode <= 0) {
+            return true;
+        }
+        $ts = (int) strtotime(substr($day, 0, 10) . ' 12:00');
+        $md = (int) date('n', $ts) * 100 + (int) date('j', $ts);
+        $start = $mode === 2 ? self::MonthDay(self::FirstAdvent((int) date('Y', $ts))) : $startMd;
+        if ($start <= $endMd) {
+            return $md >= $start && $md <= $endMd;
+        }
+        return $md >= $start || $md <= $endMd;
+    }
+
+    /** Beginn der nächsten Saison als Zeitstempel (für die Anzeige „ab …“) */
+    public static function SeasonStart(int $now, int $mode, int $startMd): int
+    {
+        $year = (int) date('Y', $now);
+        for ($y = $year; $y <= $year + 1; $y++) {
+            $ts = $mode === 2 ? self::FirstAdvent($y) : mktime(0, 0, 0, intdiv($startMd, 100), $startMd % 100, $y);
+            if ($ts >= mktime(0, 0, 0, (int) date('n', $now), (int) date('j', $now), $year)) {
+                return $ts;
+            }
+        }
+        return 0;
+    }
+
+    public static function MonthDay(int $ts): int
+    {
+        return (int) date('n', $ts) * 100 + (int) date('j', $ts);
+    }
+
+    // =====================================================================
+    // Helligkeit
+    // =====================================================================
 
     /** Dauerhaft hell: mindestens $need der letzten Werte über der Ausschaltgrenze */
     public static function Bright(array $values, float $luxOff, int $need): bool
@@ -97,10 +200,15 @@ final class DekoLogic
         return $diff > $tolerance ? 1 : ($diff < -$tolerance ? -1 : 0);
     }
 
+    // =====================================================================
+    // Entscheidung
+    // =====================================================================
+
     /**
-     * Entscheidung. Erwartet:
-     *  automatic, now, sec, on, off (Sekunden seit Mitternacht), present, vacation,
-     *  sensorOk, lux (?float), luxOn, luxOff, bright (dauerhaft hell), sunsetReached,
+     * Erwartet:
+     *  automatic, now, inSeason, seasonStart (Text), windowActive, nextOn (Text), morning (aktives Fenster ist das Morgenfenster),
+     *  present, vacation (sperrt das Einschalten), sensorOk, lux (?float), luxOn, luxOff, bright (dauerhaft hell),
+     *  sunDark (abends: Sonnenuntergang erreicht, morgens: vor Sonnenaufgang),
      *  lastTarget ('on'|'off'|''), onToday, multiple, onSince, minRun (Sekunden)
      *
      * Liefert target ('on'|'off'|null = nichts tun), status, reason (englischer Text mit %-Platzhaltern), args.
@@ -114,13 +222,16 @@ final class DekoLogic
             return $out(null, self::ST_OFF, 'Automatic is off');
         }
 
-        $window = self::Window($c['sec'], $c['on'], $c['off']);
+        if (!($c['inSeason'] ?? true)) {
+            return $out(self::TARGET_OFF, self::ST_SEASON, 'Outside the season – from %s', [(string) ($c['seasonStart'] ?? '')]);
+        }
+
         $isOn = $c['lastTarget'] === self::TARGET_ON;
         $minRunLeft = ($isOn && $c['onSince'] > 0) ? max(0, $c['onSince'] + $c['minRun'] - $c['now']) : 0;
 
         // Ende des Zeitfensters: immer aus, auch während der Mindestlaufzeit
-        if (!$window['active']) {
-            return $out(self::TARGET_OFF, self::ST_WINDOW, 'Switching on from %s at the earliest', [gmdate('H:i', $c['on'])]);
+        if (!$c['windowActive']) {
+            return $out(self::TARGET_OFF, self::ST_WINDOW, 'Switching on from %s at the earliest', [(string) $c['nextOn']]);
         }
 
         if (!$c['present']) {
@@ -146,16 +257,20 @@ final class DekoLogic
         }
 
         $byLux = $c['sensorOk'] && $c['lux'] !== null && $c['lux'] < $c['luxOn'];
-        if (!$byLux && !$c['sunsetReached']) {
-            return $out(null, self::ST_WAITING, $c['sensorOk'] ? 'Waiting for dusk' : 'Sensor fault – waiting for sunset');
+        if (!$byLux && !$c['sunDark']) {
+            if (!$c['sensorOk']) {
+                return $out(null, self::ST_WAITING, $c['morning'] ? 'Sensor fault – sunrise has passed' : 'Sensor fault – waiting for sunset');
+            }
+            return $out(null, self::ST_WAITING, $c['morning'] ? 'Bright enough in the morning' : 'Waiting for dusk');
         }
 
         if ($c['onToday'] && !$c['multiple']) {
             return $out(null, self::ST_LIMIT, 'Already switched on today');
         }
 
-        return $byLux
-            ? $out(self::TARGET_ON, self::ST_ON, 'Darker than %d lx', [(int) $c['luxOn']])
-            : $out(self::TARGET_ON, self::ST_ON, 'Sunset reached');
+        if ($byLux) {
+            return $out(self::TARGET_ON, self::ST_ON, 'Darker than %d lx', [(int) $c['luxOn']]);
+        }
+        return $out(self::TARGET_ON, self::ST_ON, $c['morning'] ? 'Before sunrise' : 'Sunset reached');
     }
 }

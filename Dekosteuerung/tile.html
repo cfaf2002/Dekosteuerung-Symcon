@@ -166,12 +166,12 @@
             <div class="scale"><span id="limitOn"></span><span id="limitOff"></span></div>
         </div>
         <div class="card">
-            <div class="label" data-t="Sunset">Sunset</div>
+            <div class="label" id="sunLabel" data-t="Sunset">Sunset</div>
             <div class="value" id="sunset">–</div>
             <div class="sub" id="sunsetSub"></div>
         </div>
         <div class="card">
-            <div class="label" data-t="Time window">Time window</div>
+            <div class="label" id="windowLabel" data-t="Time window">Time window</div>
             <div class="value" id="window">–</div>
             <div class="sub" id="windowSub"></div>
         </div>
@@ -212,7 +212,7 @@
         var inView = true;
 
         // Status → Farbton (Werte wie DekoLogic::ST_*)
-        var TONES = { 0: 'info', 1: 'off', 2: 'ok', 3: 'off', 4: 'warn', 5: 'info', 6: 'info', 7: 'warn', 8: 'info' };
+        var TONES = { 0: 'info', 1: 'off', 2: 'ok', 3: 'off', 4: 'warn', 5: 'info', 6: 'info', 7: 'warn', 8: 'info', 9: 'off', 10: 'info' };
 
         function t(s) {
             return typeof window.translate === 'function' ? window.translate(s) : s;
@@ -317,7 +317,7 @@
             list.forEach(function (l) {
                 var el = document.createElement('span');
                 el.className = 'lamp' + (l.on ? ' on' : '') + (missing.indexOf(l.name) >= 0 ? ' miss' : '');
-                el.title = l.name;
+                el.title = l.name + (l.until ? ' · ' + t('until') + ' ' + l.until : '') + (l.morning === false ? ' · ' + t('not in the morning') : '');
                 var dot = document.createElement('i');
                 var name = document.createElement('span');
                 name.textContent = l.name;
@@ -344,7 +344,8 @@
 
             // Zeitfenster
             setText('window', (d.timeOn || '–') + '–' + (d.timeOff || '–'));
-            setText('windowSub', (d.window ? t('active') : t('not active')) + (d.overMidnight ? ' · ' + t('over midnight') : ''));
+            setText('windowLabel', t(d.morningWindow ? 'Morning window' : 'Time window'));
+            setText('windowSub', (d.window ? t('active') : t('not active')) + (d.weekend ? ' · ' + t('weekend') : '') + (d.overMidnight ? ' · ' + t('over midnight') : ''));
 
             // Bedingungen
             var chips = $('chips');
@@ -355,7 +356,9 @@
                 } else if (d.force && d.presenceSensor === false) {
                     chips.appendChild(chip(t('Presence forced'), 'note'));
                 }
-                if (d.vacation) {
+                if (d.simulation) {
+                    chips.appendChild(chip(t('Vacation simulation'), 'note'));
+                } else if (d.vacation) {
                     chips.appendChild(chip(t('Vacation'), 'note'));
                 }
                 if (d.onToday && !d.multiple && d.status !== 2) {
@@ -386,9 +389,11 @@
                 return;
             }
             var n = now();
-            if (data.sunset) {
-                setText('sunset', clock(data.sunset));
-                var diff = data.sunset - n;
+            var sun = data.sunrise || data.sunset;
+            setText('sunLabel', t(data.sunrise ? 'Sunrise' : 'Sunset'));
+            if (sun) {
+                setText('sunset', clock(sun));
+                var diff = sun - n;
                 setText('sunsetSub', diff > 0 ? t('in') + ' ' + duration(diff) : t('since') + ' ' + duration(-diff));
             } else {
                 setText('sunset', '–');

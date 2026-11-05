@@ -149,6 +149,76 @@ try {
     ok(GetValue(own($id, 'Status')) === 0, 'DEKO_SetAutomatic aus');
     DEKO_SetAutomatic($id, true);
 
+    // Version 2.0: Dimmer und eigene Ausschaltzeit je Lampe
+    $dimmer = variable(1, 0, $script, 'Sterne');
+    DEKO_SetLights($id, false);
+    IPS_SetProperty($id, 'Lights', json_encode([
+        ['VariableID' => $lamp1, 'Name' => '', 'OffTime' => date('H:i', time() - 60), 'Morning' => true, 'Level' => 100],
+        ['VariableID' => $lamp2, 'Name' => 'Fensterstern', 'OffTime' => '', 'Morning' => true, 'Level' => 100],
+        ['VariableID' => $dimmer, 'Name' => '', 'OffTime' => '', 'Morning' => false, 'Level' => 80],
+    ]));
+    IPS_SetProperty($id, 'MinOnMinutes', 0);
+    IPS_ApplyChanges($id);
+    RequestAction(own($id, 'TimeOn'), time() - 7200);
+    // Automatik neu starten: alle Lampen aus gilt als letztes Ziel, dann wird es dunkel
+    DEKO_SetAutomatic($id, false);
+    DEKO_SetAutomatic($id, true);
+    SetValue($lux, 300.0);
+    DEKO_Evaluate($id);
+    ok(GetValue($dimmer) === 80, 'Dimmer mit Dimmwert eingeschaltet');
+    ok(GetValue($lamp2) === true, 'Lampe ohne eigene Zeit an');
+    ok(GetValue($lamp1) === false, 'Lampe mit abgelaufener eigener Ausschaltzeit bleibt aus');
+
+    // Wochenende: eigene Variable für die Ausschaltzeit
+    IPS_SetProperty($id, 'WeekendMode', 1);
+    IPS_ApplyChanges($id);
+    ok(@IPS_GetObjectIDByIdent('TimeOffWeekend', $id) !== false, 'Variable Ausschaltzeitpunkt Wochenende');
+    ok(date('H:i', GetValue(own($id, 'TimeOffWeekend'))) === '00:30', 'Wochenende startet mit 00:30');
+
+    // Morgenfenster: ungültige Zeiten melden
+    IPS_SetProperty($id, 'MorningEnabled', true);
+    IPS_SetProperty($id, 'MorningFrom', '{"hour":8,"minute":0,"second":0}');
+    IPS_SetProperty($id, 'MorningTo', '{"hour":6,"minute":0,"second":0}');
+    IPS_ApplyChanges($id);
+    ok(IPS_GetInstance($id)['InstanceStatus'] === 205, 'Morgenfenster mit Ende vor Beginn: Status 205');
+    IPS_SetProperty($id, 'MorningEnabled', false);
+    IPS_ApplyChanges($id);
+
+    // Saison: heute außerhalb → aus
+    $md = (int) date('n') * 100 + (int) date('j');
+    $other = $md <= 615 ? [7, 1, 8, 1] : [1, 2, 2, 2];
+    IPS_SetProperty($id, 'SeasonMode', 1);
+    IPS_SetProperty($id, 'SeasonStartMonth', $other[0]);
+    IPS_SetProperty($id, 'SeasonStartDay', $other[1]);
+    IPS_SetProperty($id, 'SeasonEndMonth', $other[2]);
+    IPS_SetProperty($id, 'SeasonEndDay', $other[3]);
+    IPS_ApplyChanges($id);
+    ok(GetValue(own($id, 'Status')) === 9, 'Außerhalb der Saison: Status 9');
+    ok(GetValue($lamp2) === false && GetValue($dimmer) === 0, 'Außerhalb der Saison: Lampen aus');
+    IPS_SetProperty($id, 'SeasonMode', 0);
+    IPS_ApplyChanges($id);
+
+    // Urlaubssimulation: abwesend, aber Urlaub → schaltet mit Zufallsversatz ein
+    SetValue($presence, false);
+    SetValue($vacation, true);
+    IPS_SetProperty($id, 'VacationMode', 1);
+    IPS_SetProperty($id, 'RandomMinutes', 120);
+    IPS_ApplyChanges($id);
+    $st = GetValue(own($id, 'Status'));
+    ok($st === 10 || GetValue($lamp2) === true, 'Urlaubssimulation: Einschalten geplant oder erfolgt');
+    IPS_SetProperty($id, 'RandomMinutes', 0);
+    IPS_ApplyChanges($id);
+    ok(GetValue($lamp2) === true, 'Urlaubssimulation ohne Versatz: sofort an');
+    SetValue($vacation, false);
+    SetValue($presence, true);
+    IPS_SetProperty($id, 'VacationMode', 0);
+    IPS_ApplyChanges($id);
+
+    // Benachrichtigung ohne Visualisierung: kein Absturz
+    ob_start();
+    IPS_RequestAction($id, 'TestNotify', 0);
+    ok(ob_get_clean() !== '', 'Testnachricht ohne Visualisierung meldet sich');
+
     // Kachel
     $tile = DEKO_GetVisualizationTile($id);
     ok(!str_contains($tile, '/*INITIAL_DATA*/'), 'Kachel mit Startdaten');

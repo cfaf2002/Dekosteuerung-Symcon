@@ -13,10 +13,14 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../libs/DekoLogic.php';
+require_once __DIR__ . '/../libs/DekoLampTrait.php';
+require_once __DIR__ . '/../libs/DekoNotifyTrait.php';
 require_once __DIR__ . '/../libs/DekoImportTrait.php';
 
 class Dekosteuerung extends IPSModuleStrict
 {
+    use DekoLampTrait;
+    use DekoNotifyTrait;
     use DekoImportTrait;
 
     private const LOCATION_GUID = '{45E97A63-F870-408A-B259-2933F7EABF74}';
@@ -27,8 +31,8 @@ class Dekosteuerung extends IPSModuleStrict
     /** Wartezeit, bis die Rückmeldung der Lampen geprüft wird (Millisekunden) */
     private const VERIFY_MS = 5000;
 
-    /** Namen, die nichts über die Lampe sagen – dann wird der Name des übergeordneten Objekts gezeigt */
-    private const GENERIC_NAMES = ['status', 'state', 'zustand', 'schalten', 'switch', 'wert', 'value', 'an/aus', 'ein/aus', 'on/off', 'schaltzustand'];
+    /** Wochenend-Abende je Einstellung (ISO-Wochentag des Abends) */
+    private const WEEKEND_DAYS = [0 => [], 1 => [5, 6], 2 => [6, 7], 3 => [5, 6, 7]];
 
     public function Create(): void
     {
@@ -37,7 +41,7 @@ class Dekosteuerung extends IPSModuleStrict
 
         $this->RegisterPropertyBoolean('Active', true);
 
-        // Lampen
+        // Lampen (Spalten: VariableID, Name, OffTime, Morning, Level)
         $this->RegisterPropertyString('Lights', '[]');
 
         // Auslöser
@@ -51,8 +55,31 @@ class Dekosteuerung extends IPSModuleStrict
         // Bedingungen
         $this->RegisterPropertyInteger('PresenceVariableID', 0);
         $this->RegisterPropertyInteger('VacationVariableID', 0);
+        $this->RegisterPropertyInteger('VacationMode', 0);
+        $this->RegisterPropertyInteger('RandomMinutes', 20);
         $this->RegisterPropertyInteger('MinOnMinutes', 30);
         $this->RegisterPropertyBoolean('Enforce', false);
+
+        // Zeiten: Wochenende und Morgenfenster
+        $this->RegisterPropertyInteger('WeekendMode', 0);
+        $this->RegisterPropertyBoolean('MorningEnabled', false);
+        $this->RegisterPropertyString('MorningFrom', '{"hour":6,"minute":0,"second":0}');
+        $this->RegisterPropertyString('MorningTo', '{"hour":8,"minute":0,"second":0}');
+        $this->RegisterPropertyBoolean('MorningUntilSunrise', true);
+        $this->RegisterPropertyBoolean('MorningWorkdays', false);
+        $this->RegisterPropertyInteger('SunriseVariableID', 0);
+
+        // Saison
+        $this->RegisterPropertyInteger('SeasonMode', 0);
+        $this->RegisterPropertyInteger('SeasonStartDay', 15);
+        $this->RegisterPropertyInteger('SeasonStartMonth', 11);
+        $this->RegisterPropertyInteger('SeasonEndDay', 6);
+        $this->RegisterPropertyInteger('SeasonEndMonth', 1);
+
+        // Benachrichtigung
+        $this->RegisterPropertyBoolean('NotifyUnconfirmed', false);
+        $this->RegisterPropertyBoolean('NotifySensor', false);
+        $this->RegisterPropertyInteger('NotifyTarget', 0);
 
         // Kachel
         $this->RegisterPropertyBoolean('UseTile', true);
@@ -68,11 +95,15 @@ class Dekosteuerung extends IPSModuleStrict
         $this->RegisterAttributeInteger('LastSwitch', 0);
         $this->RegisterAttributeString('LastSwitchTarget', '');
         $this->RegisterAttributeString('LastSwitchReason', '');
-        $this->RegisterAttributeString('Expected', '');
+        $this->RegisterAttributeString('Expected', '{}');
         $this->RegisterAttributeString('Unconfirmed', '[]');
         $this->RegisterAttributeString('LuxHistory', '[]');
         $this->RegisterAttributeInteger('LuxSampleTime', 0);
         $this->RegisterAttributeInteger('SensorFaultSince', 0);
+        $this->RegisterAttributeString('PendingTarget', '');
+        $this->RegisterAttributeInteger('PendingAt', 0);
+        $this->RegisterAttributeString('LampOffDay', '');
+        $this->RegisterAttributeString('LampOffDone', '[]');
         $this->RegisterAttributeString('TileData', '{}');
         $this->RegisterAttributeString('Watched', '[]');
         $this->RegisterAttributeBoolean('Initialized', false);
@@ -157,6 +188,7 @@ class Dekosteuerung extends IPSModuleStrict
 
             case 'TimeOn':
             case 'TimeOff':
+            case 'TimeOffWeekend':
                 $this->SetValue($Ident, (int) $Value);
                 $this->Reevaluate();
                 return;
@@ -169,6 +201,12 @@ class Dekosteuerung extends IPSModuleStrict
 
             case 'ImportScript':
                 echo $this->ImportFromScript((int) $Value);
+                return;
+
+            case 'TestNotify':
+                echo $this->Notify($this->Translate('Decoration light'), $this->Translate('Test message from the decoration lighting control.'))
+                    ? $this->Translate('Message sent.')
+                    : $this->Translate('No visualization found or sending failed – see debug.');
                 return;
 
             default:
@@ -193,11 +231,9 @@ class Dekosteuerung extends IPSModuleStrict
     /** Alle Lampen von Hand schalten (DEKO_SetLights). Die Automatik schaltet erst bei der nächsten Zieländerung wieder. */
     public function SetLights(bool $On): bool
     {
-        $this->WriteAttributeString('Expected', $On ? DekoLogic::TARGET_ON : DekoLogic::TARGET_OFF);
-        $ok = $this->SwitchAll($On) >= 0;
-        $this->UpdateLightsValue();
+        $this->SwitchLamps(array_fill_keys($this->LightIDs(), $On));
         $this->PushTile(null, null);
-        return $ok;
+        return true;
     }
 
     /** Automatik ein- oder ausschalten (DEKO_SetAutomatic) */
@@ -229,8 +265,11 @@ class Dekosteuerung extends IPSModuleStrict
         $now = $this->Now();
         $ctx = $this->Context($now);
         $result = DekoLogic::Decide($ctx);
-        $target = $result['target'];
         $last = $ctx['lastTarget'];
+
+        // Urlaubssimulation: Wechsel mit zufälligem Versatz, damit das Haus nicht nach Uhr schaltet
+        $result = $this->ApplyRandomDelay($result, $ctx, $now);
+        $target = $result['target'];
         $reason = vsprintf($this->Translate($result['reason']), $result['args']);
 
         $act = false;
@@ -251,9 +290,7 @@ class Dekosteuerung extends IPSModuleStrict
         $this->SendDebug('Bewertung', sprintf('%s → Ziel %s, %s', $trigger, $target ?? '–', $reason), 0);
 
         if ($act) {
-            $this->WriteAttributeString('Expected', (string) $target);
-            $changed = $this->SwitchAll($target === DekoLogic::TARGET_ON);
-            $this->UpdateLightsValue();
+            $changed = $this->SwitchLamps($this->TargetsFor($target === DekoLogic::TARGET_ON, $ctx, $now));
             if ($changed > 0 || $target !== $last) {
                 $this->WriteAttributeInteger('LastSwitch', $now);
                 $this->WriteAttributeString('LastSwitchTarget', (string) $target);
@@ -261,25 +298,134 @@ class Dekosteuerung extends IPSModuleStrict
             }
         }
 
+        // Lampen mit eigener, früherer Ausschaltzeit
+        $this->LampOffTimes($ctx, $now);
+
         $this->SetValueIfChanged('Status', $result['status']);
         $this->SetValueIfChanged('Reason', $reason);
         $this->PushTile($ctx, $result);
+    }
+
+    /** Zielzustand je Lampe: beim Einschalten nur die, die gerade dürfen */
+    private function TargetsFor(bool $on, array $ctx, int $now): array
+    {
+        $targets = [];
+        foreach ($this->LampRows() as $id => $row) {
+            $lampOn = $on;
+            if ($on && $ctx['morning'] && !$row['Morning']) {
+                $lampOn = false;
+            }
+            if ($on && !$ctx['morning']) {
+                $offAt = $this->LampOffTime($row, $ctx['dayKey'], $ctx['eveningOn']);
+                if ($offAt > 0 && $now >= $offAt) {
+                    $lampOn = false;
+                }
+            }
+            // Beim Einschalten nur einschalten; was nicht dabei ist, bleibt, wie es ist
+            if ($on && !$lampOn) {
+                continue;
+            }
+            $targets[$id] = $lampOn;
+        }
+        return $targets;
+    }
+
+    /** Schaltet am Abend einzelne Lampen zu ihrer eigenen Zeit aus – je Abend einmal */
+    private function LampOffTimes(array $ctx, int $now): void
+    {
+        if ($ctx['morning'] || !$ctx['windowActive'] || $this->ReadAttributeString('LastTarget') !== DekoLogic::TARGET_ON || !$ctx['automatic']) {
+            return;
+        }
+        if ($this->ReadAttributeString('LampOffDay') !== $ctx['dayKey']) {
+            $this->WriteAttributeString('LampOffDay', $ctx['dayKey']);
+            $this->WriteAttributeString('LampOffDone', '[]');
+        }
+        $done = json_decode($this->ReadAttributeString('LampOffDone'), true) ?: [];
+        $off = [];
+        foreach ($this->LampRows() as $id => $row) {
+            $offAt = $this->LampOffTime($row, $ctx['dayKey'], $ctx['eveningOn']);
+            if ($offAt > 0 && $now >= $offAt && !in_array($id, $done, true)) {
+                $off[$id] = false;
+                $done[] = $id;
+            }
+        }
+        if ($off !== []) {
+            $this->SendDebug('Lampe', 'eigene Ausschaltzeit: ' . implode(', ', array_keys($off)), 0);
+            $this->SwitchLamps($off);
+            $this->WriteAttributeString('LampOffDone', (string) json_encode($done));
+        }
+    }
+
+    /** Urlaubssimulation: neues Ziel erst nach einem zufälligen Versatz umsetzen */
+    private function ApplyRandomDelay(array $result, array $ctx, int $now): array
+    {
+        $target = $result['target'];
+        $max = max(0, $this->ReadPropertyInteger('RandomMinutes')) * 60;
+        $pending = $this->ReadAttributeString('PendingTarget');
+        if (!$ctx['simulation'] || $max === 0 || $target === null || $target === $ctx['lastTarget'] || $ctx['lastTarget'] === '') {
+            if ($pending !== '') {
+                $this->WriteAttributeString('PendingTarget', '');
+                $this->WriteAttributeInteger('PendingAt', 0);
+            }
+            return $result;
+        }
+        if ($pending !== $target) {
+            $this->WriteAttributeString('PendingTarget', $target);
+            $this->WriteAttributeInteger('PendingAt', $now + random_int(0, $max));
+        }
+        $at = $this->ReadAttributeInteger('PendingAt');
+        if ($now < $at) {
+            return [
+                'target' => null,
+                'status' => DekoLogic::ST_PENDING,
+                'reason' => $target === DekoLogic::TARGET_ON ? 'Vacation simulation – switching on at %s' : 'Vacation simulation – switching off at %s',
+                'args'   => [date('H:i', $at)],
+            ];
+        }
+        $this->WriteAttributeString('PendingTarget', '');
+        $this->WriteAttributeInteger('PendingAt', 0);
+        return $result;
     }
 
     /** Sammelt alle Werte für die Entscheidung */
     private function Context(int $now): array
     {
         $sec = DekoLogic::Seconds($now);
-        $on = DekoLogic::Seconds((int) $this->GetValue('TimeOn'));
-        $off = DekoLogic::Seconds((int) $this->GetValue('TimeOff'));
 
-        // Anwesenheit (ohne Sensor gilt das Haus als bewohnt)
+        // Zeitfenster: Abend (mit Wochenende) und Morgen
+        $evOn = DekoLogic::Seconds((int) $this->GetValue('TimeOn'));
+        $evOff = DekoLogic::Seconds((int) $this->GetValue('TimeOff'));
+        $weekendMode = $this->ReadPropertyInteger('WeekendMode');
+        $evOffWeekend = $weekendMode > 0 && $this->VariableID('TimeOffWeekend') > 0 ? DekoLogic::Seconds((int) $this->GetValue('TimeOffWeekend')) : $evOff;
+        $evening = DekoLogic::Evening($now, $evOn, $evOff, $evOffWeekend, self::WEEKEND_DAYS[$weekendMode] ?? []);
+
+        $sunrise = $this->SunTime('Sunrise', 'SunriseVariableID', $now, 0);
+        $morning = null;
+        $morningFrom = $this->TimeProperty('MorningFrom');
+        $morningOn = $this->ReadPropertyBoolean('MorningEnabled');
+        if ($morningOn && (!$this->ReadPropertyBoolean('MorningWorkdays') || (int) date('N', $now) <= 5)) {
+            $morning = DekoLogic::Morning($now, $morningFrom, $this->TimeProperty('MorningTo'), $this->ReadPropertyBoolean('MorningUntilSunrise') ? $sunrise : 0);
+        }
+        $isMorning = $morning !== null && $morning['active'];
+        $window = $isMorning ? $morning : $evening;
+
+        // Nächster Fensterbeginn (für „Einschalten frühestens ab …“)
+        $nextOn = ($morningOn && ($sec < $morningFrom || $sec >= $evOn)) ? $morningFrom : $evOn;
+
+        // Saison (zählt nach dem Schaltabend: 0:30 Uhr gehört noch zum Vorabend)
+        $seasonMode = $this->ReadPropertyInteger('SeasonMode');
+        $startMd = $this->ReadPropertyInteger('SeasonStartMonth') * 100 + $this->ReadPropertyInteger('SeasonStartDay');
+        $endMd = $this->ReadPropertyInteger('SeasonEndMonth') * 100 + $this->ReadPropertyInteger('SeasonEndDay');
+        $inSeason = DekoLogic::InSeason($window['day'], $seasonMode, $startMd, $endMd);
+        $seasonStart = $inSeason ? 0 : DekoLogic::SeasonStart($now, $seasonMode, $startMd);
+
+        // Anwesenheit (ohne Sensor gilt das Haus als bewohnt) und Urlaub
         $pid = $this->ReadPropertyInteger('PresenceVariableID');
         $presenceSensor = $pid > 0 ? (IPS_VariableExists($pid) && (bool) GetValue($pid)) : null;
         $force = (bool) $this->GetValue('ForcePresence');
-
         $vid = $this->ReadPropertyInteger('VacationVariableID');
         $vacation = $vid > 0 && IPS_VariableExists($vid) && (bool) GetValue($vid);
+        $simulation = $vacation && $this->ReadPropertyInteger('VacationMode') === 1;
 
         // Helligkeit
         $lux = null;
@@ -293,21 +439,14 @@ class Dekosteuerung extends IPSModuleStrict
             $age = $updated > 0 ? max(0, $now - $updated) : null;
             $sensorOk = $age !== null && $age <= max(1, $this->ReadPropertyInteger('SensorMaxAge')) * 60;
         }
-        $faultSince = $this->ReadAttributeInteger('SensorFaultSince');
-        if ($hasSensor && !$sensorOk && $faultSince === 0) {
-            $faultSince = $now;
-            $this->WriteAttributeInteger('SensorFaultSince', $now);
-        } elseif ((!$hasSensor || $sensorOk) && $faultSince !== 0) {
-            $faultSince = 0;
-            $this->WriteAttributeInteger('SensorFaultSince', 0);
-        }
+        $faultSince = $this->TrackSensorFault($hasSensor, $sensorOk, $now);
 
         // Verlauf: höchstens alle 5 Minuten ein Wert, die letzten fünf zählen
         $history = json_decode($this->ReadAttributeString('LuxHistory'), true) ?: [];
         if ($sensorOk && $now - $this->ReadAttributeInteger('LuxSampleTime') >= self::SAMPLE_SECONDS) {
             $history[] = round((float) $lux, 1);
             $history = array_slice($history, -DekoLogic::HISTORY_SIZE);
-            $this->WriteAttributeString('LuxHistory', json_encode($history));
+            $this->WriteAttributeString('LuxHistory', (string) json_encode($history));
             $this->WriteAttributeInteger('LuxSampleTime', $now);
         }
 
@@ -315,26 +454,34 @@ class Dekosteuerung extends IPSModuleStrict
         $luxOff = (int) $this->GetValue('LuxOff');
         $need = max(1, min(DekoLogic::HISTORY_SIZE, $this->ReadPropertyInteger('BrightCount')));
 
-        // Sonnenuntergang (heute, mit Versatz)
-        $sunset = $this->SunsetTime($now);
-        $useSunset = $this->ReadPropertyBoolean('UseSunset');
-
-        $lastTarget = $this->ReadAttributeString('LastTarget');
-        $dayKey = DekoLogic::DayKey($now, $sec, $on, $off);
+        $sunset = $this->SunTime('Sunset', 'SunsetVariableID', $now, $this->ReadPropertyInteger('SunsetOffset') * 60);
+        $sunDark = $isMorning
+            ? ($sunrise > 0 && $now < $sunrise)
+            : ($this->ReadPropertyBoolean('UseSunset') && $sunset > 0 && $now >= $sunset);
 
         return [
             'automatic'      => (bool) $this->GetValue('Automatic'),
             'now'            => $now,
-            'sec'            => $sec,
-            'on'             => $on,
-            'off'            => $off,
+            'inSeason'       => $inSeason,
+            'seasonStart'    => $seasonStart > 0 ? date('d.m.', $seasonStart) : '',
+            'seasonMode'     => $seasonMode,
+            'windowActive'   => $window['active'],
+            'windowOn'       => $window['on'],
+            'windowOff'      => $window['off'],
+            'overMidnight'   => $window['overMidnight'],
+            'weekend'        => $window['weekend'],
+            'eveningOn'      => $evOn,
+            'nextOn'         => DekoLogic::Clock($nextOn),
+            'morning'        => $isMorning,
+            'dayKey'         => $window['day'],
             'presenceSensor' => $presenceSensor,
             'force'          => $force,
-            'present'        => $force || ($presenceSensor ?? true),
-            'vacation'       => $vacation,
+            'present'        => $force || ($presenceSensor ?? true) || $simulation,
+            'vacation'       => $vacation && !$simulation,
+            'vacationActive' => $vacation,
+            'simulation'     => $simulation,
             'hasSensor'      => $hasSensor,
             'sensorOk'       => $sensorOk,
-            'sensorAge'      => $age,
             'faultSince'     => $faultSince,
             'lux'            => $hasSensor ? $lux : null,
             'luxOn'          => $luxOn,
@@ -342,20 +489,38 @@ class Dekosteuerung extends IPSModuleStrict
             'history'        => $history,
             'bright'         => $sensorOk && DekoLogic::Bright($history, (float) $luxOff, $need),
             'sunset'         => $sunset,
-            'sunsetReached'  => $useSunset && $sunset > 0 && $now >= $sunset,
-            'lastTarget'     => $lastTarget,
-            'dayKey'         => $dayKey,
-            'onToday'        => $this->ReadAttributeString('OnDay') === $dayKey,
+            'sunrise'        => $sunrise,
+            'sunDark'        => $sunDark,
+            'lastTarget'     => $this->ReadAttributeString('LastTarget'),
+            'onToday'        => $this->ReadAttributeString('OnDay') === $window['day'],
             'multiple'       => (bool) $this->GetValue('AllowMultiple'),
             'onSince'        => $this->ReadAttributeInteger('OnSince'),
             'minRun'         => max(0, $this->ReadPropertyInteger('MinOnMinutes')) * 60,
         ];
     }
 
-    /** Heutiger Sonnenuntergang inkl. Versatz, 0 wenn unbekannt oder nicht von heute */
-    private function SunsetTime(int $now): int
+    /** Merkt sich den Beginn eines Sensorausfalls und meldet ihn auf Wunsch einmal */
+    private function TrackSensorFault(bool $hasSensor, bool $sensorOk, int $now): int
     {
-        $id = $this->SunsetVariable();
+        $since = $this->ReadAttributeInteger('SensorFaultSince');
+        if ($hasSensor && !$sensorOk && $since === 0) {
+            $this->WriteAttributeInteger('SensorFaultSince', $now);
+            if ($this->ReadPropertyBoolean('NotifySensor')) {
+                $this->Notify($this->Translate('Decoration light'), $this->Translate('The brightness sensor sends no values. Switching on by sunset only.'));
+            }
+            return $now;
+        }
+        if ((!$hasSensor || $sensorOk) && $since !== 0) {
+            $this->WriteAttributeInteger('SensorFaultSince', 0);
+            return 0;
+        }
+        return $since;
+    }
+
+    /** Heutiger Sonnenauf- oder -untergang inkl. Versatz, 0 wenn unbekannt oder nicht von heute */
+    private function SunTime(string $ident, string $property, int $now, int $offset): int
+    {
+        $id = $this->SunVariable($ident, $property);
         if ($id === 0) {
             return 0;
         }
@@ -363,18 +528,18 @@ class Dekosteuerung extends IPSModuleStrict
         if ($ts <= 0 || date('Y-m-d', $ts) !== date('Y-m-d', $now)) {
             return 0;
         }
-        return $ts + $this->ReadPropertyInteger('SunsetOffset') * 60;
+        return $ts + $offset;
     }
 
-    /** Variable mit dem Sonnenuntergang: eigene Auswahl, sonst „Sunset“ aus Kern Instanzen → Location */
-    private function SunsetVariable(): int
+    /** Variable mit Sonnenauf- oder -untergang: eigene Auswahl, sonst aus Kern Instanzen → Location */
+    private function SunVariable(string $ident, string $property): int
     {
-        $id = $this->ReadPropertyInteger('SunsetVariableID');
+        $id = $this->ReadPropertyInteger($property);
         if ($id > 0) {
             return IPS_VariableExists($id) ? $id : 0;
         }
         foreach (IPS_GetInstanceListByModuleID(self::LOCATION_GUID) as $instance) {
-            $vid = @IPS_GetObjectIDByIdent('Sunset', $instance);
+            $vid = @IPS_GetObjectIDByIdent($ident, $instance);
             if (is_int($vid) && $vid > 0 && IPS_VariableExists($vid)) {
                 return $vid;
             }
@@ -382,101 +547,11 @@ class Dekosteuerung extends IPSModuleStrict
         return 0;
     }
 
-    // =====================================================================
-    // Lampen
-    // =====================================================================
-
-    /** @return int[] */
-    private function LightIDs(): array
+    /** Zeit-Eigenschaft (SelectTime, JSON) in Sekunden seit Mitternacht */
+    private function TimeProperty(string $property): int
     {
-        $ids = [];
-        foreach (json_decode($this->ReadPropertyString('Lights'), true) ?: [] as $row) {
-            $id = (int) ($row['VariableID'] ?? 0);
-            if ($id > 0) {
-                $ids[] = $id;
-            }
-        }
-        return array_values(array_unique($ids));
-    }
-
-    /**
-     * Schaltet alle Lampen, die nicht schon so stehen. Liefert die Zahl der Schaltbefehle.
-     * Die Rückmeldung wird nach einigen Sekunden geprüft (Timer „Verify“), nicht sofort –
-     * KNX- und Funk-Aktoren melden oft erst nach einer Weile zurück.
-     */
-    private function SwitchAll(bool $on): int
-    {
-        $count = 0;
-        foreach ($this->LightIDs() as $id) {
-            if (!IPS_VariableExists($id) || !HasAction($id)) {
-                $this->SendDebug('Lampe', $id . ' fehlt oder hat keine Aktion', 0);
-                continue;
-            }
-            if ((bool) GetValue($id) === $on) {
-                continue;
-            }
-            try {
-                RequestAction($id, $on);
-                $count++;
-            } catch (Throwable $e) {
-                $this->SendDebug('Lampe', $id . ': ' . $e->getMessage(), 0);
-            }
-        }
-        $this->WriteAttributeString('Unconfirmed', '[]');
-        $this->SetTimerInterval('Verify', $count > 0 ? self::VERIFY_MS : 0);
-        return $count;
-    }
-
-    private function VerifyLights(): void
-    {
-        $expected = $this->ReadAttributeString('Expected');
-        if ($expected === '') {
-            return;
-        }
-        $want = $expected === DekoLogic::TARGET_ON;
-        $missing = [];
-        foreach ($this->LightIDs() as $id) {
-            if (IPS_VariableExists($id) && (bool) GetValue($id) !== $want) {
-                $missing[] = $this->LightName($id);
-            }
-        }
-        $this->WriteAttributeString('Unconfirmed', json_encode($missing));
-        if ($missing !== []) {
-            $this->LogMessage(sprintf($this->Translate('No confirmation from: %s'), implode(', ', $missing)), KL_WARNING);
-        }
-        $this->PushTile(null, null);
-    }
-
-    private function AnyLightOn(): bool
-    {
-        foreach ($this->LightIDs() as $id) {
-            if (IPS_VariableExists($id) && (bool) GetValue($id)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private function UpdateLightsValue(): void
-    {
-        $this->SetValueIfChanged('Lights', $this->AnyLightOn());
-    }
-
-    private function LightName(int $id): string
-    {
-        foreach (json_decode($this->ReadPropertyString('Lights'), true) ?: [] as $row) {
-            if ((int) ($row['VariableID'] ?? 0) === $id && trim((string) ($row['Name'] ?? '')) !== '') {
-                return trim((string) $row['Name']);
-            }
-        }
-        $name = IPS_GetName($id);
-        if (in_array(mb_strtolower(trim($name)), self::GENERIC_NAMES, true)) {
-            $parent = IPS_GetParent($id);
-            if ($parent > 0) {
-                return IPS_GetName($parent);
-            }
-        }
-        return $name;
+        $t = json_decode($this->ReadPropertyString($property), true) ?: [];
+        return (int) ($t['hour'] ?? 0) * 3600 + (int) ($t['minute'] ?? 0) * 60 + (int) ($t['second'] ?? 0);
     }
 
     // =====================================================================
@@ -518,6 +593,16 @@ class Dekosteuerung extends IPSModuleStrict
         $this->EnableAction('TimeOn');
         $this->MaintainVariable('TimeOff', $this->Translate('Switch-off time'), VARIABLETYPE_INTEGER, '~UnixTimestampTime', 51, true);
         $this->EnableAction('TimeOff');
+
+        $weekend = $this->ReadPropertyInteger('WeekendMode') > 0;
+        $newWeekend = $weekend && $this->VariableID('TimeOffWeekend') === 0;
+        $this->MaintainVariable('TimeOffWeekend', $this->Translate('Switch-off time at the weekend'), VARIABLETYPE_INTEGER, '~UnixTimestampTime', 52, $weekend);
+        if ($weekend) {
+            $this->EnableAction('TimeOffWeekend');
+            if ($newWeekend) {
+                $this->SetValue('TimeOffWeekend', mktime(0, 30, 0));
+            }
+        }
 
         $slider = static fn (string $icon): array => [
             'PRESENTATION' => VARIABLE_PRESENTATION_SLIDER,
@@ -564,6 +649,8 @@ class Dekosteuerung extends IPSModuleStrict
             $o(DekoLogic::ST_LIMIT, $this->Translate('Daily limit reached'), 'calendar-check', 0x6366F1),
             $o(DekoLogic::ST_BRIGHT, $this->Translate('Too bright'), 'sun', 0xF59E0B),
             $o(DekoLogic::ST_MINRUN, $this->Translate('Minimum on-time running'), 'hourglass-half', 0x1677FF),
+            $o(DekoLogic::ST_SEASON, $this->Translate('Outside the season'), 'calendar-xmark', 0x64748B),
+            $o(DekoLogic::ST_PENDING, $this->Translate('Vacation simulation'), 'shuffle', 0x0F766E),
         ];
     }
 
@@ -591,29 +678,36 @@ class Dekosteuerung extends IPSModuleStrict
             $ids[] = $this->ReadPropertyInteger($prop);
         }
         if ($this->ReadPropertyBoolean('UseSunset')) {
-            $ids[] = $this->SunsetVariable();
+            $ids[] = $this->SunVariable('Sunset', 'SunsetVariableID');
+        }
+        if ($this->ReadPropertyBoolean('MorningEnabled') && $this->ReadPropertyBoolean('MorningUntilSunrise')) {
+            $ids[] = $this->SunVariable('Sunrise', 'SunriseVariableID');
         }
         $ids = array_values(array_unique(array_filter($ids, static fn (int $id): bool => $id > 0 && IPS_VariableExists($id))));
         foreach ($ids as $id) {
             $this->RegisterMessage($id, VM_UPDATE);
             $this->RegisterReference($id);
         }
-        $this->WriteAttributeString('Watched', json_encode($ids));
+        $this->WriteAttributeString('Watched', (string) json_encode($ids));
     }
 
     private function CheckConfiguration(): int
     {
-        $lights = $this->LightIDs();
-        if ($lights === []) {
+        $rows = $this->LampRows();
+        if ($rows === []) {
             return 200;
         }
-        foreach ($lights as $id) {
+        foreach ($rows as $id => $row) {
             if (!IPS_VariableExists($id) || !HasAction($id)) {
                 $this->SendDebug('Konfiguration', 'Lampe ' . $id . ' fehlt oder hat keine Aktion', 0);
                 return 201;
             }
+            if ($row['OffTime'] !== '' && DekoLogic::ParseClock($row['OffTime']) === null) {
+                $this->SendDebug('Konfiguration', 'Lampe ' . $id . ': Ausschaltzeit „' . $row['OffTime'] . '“ ungültig', 0);
+                return 204;
+            }
         }
-        foreach (['BrightnessVariableID', 'PresenceVariableID', 'VacationVariableID', 'SunsetVariableID'] as $prop) {
+        foreach (['BrightnessVariableID', 'PresenceVariableID', 'VacationVariableID', 'SunsetVariableID', 'SunriseVariableID'] as $prop) {
             $id = $this->ReadPropertyInteger($prop);
             if ($id > 0 && !IPS_VariableExists($id)) {
                 $this->SendDebug('Konfiguration', $prop . ' (' . $id . ') existiert nicht', 0);
@@ -621,9 +715,19 @@ class Dekosteuerung extends IPSModuleStrict
             }
         }
         // Ohne Helligkeitssensor und ohne Sonnenuntergang gibt es keinen Auslöser zum Einschalten
-        $sunset = $this->ReadPropertyBoolean('UseSunset') && $this->SunsetVariable() > 0;
+        $sunset = $this->ReadPropertyBoolean('UseSunset') && $this->SunVariable('Sunset', 'SunsetVariableID') > 0;
         if ($this->ReadPropertyInteger('BrightnessVariableID') <= 0 && !$sunset) {
             return 203;
+        }
+        if ($this->ReadPropertyBoolean('MorningEnabled') && $this->TimeProperty('MorningFrom') >= $this->TimeProperty('MorningTo')) {
+            return 205;
+        }
+        if ($this->ReadPropertyInteger('SeasonMode') > 0) {
+            $ok = checkdate($this->ReadPropertyInteger('SeasonEndMonth'), $this->ReadPropertyInteger('SeasonEndDay'), 2024)
+                && ($this->ReadPropertyInteger('SeasonMode') === 2 || checkdate($this->ReadPropertyInteger('SeasonStartMonth'), $this->ReadPropertyInteger('SeasonStartDay'), 2024));
+            if (!$ok) {
+                return 206;
+            }
         }
         return 102;
     }
@@ -635,16 +739,26 @@ class Dekosteuerung extends IPSModuleStrict
     public function GetConfigurationForm(): string
     {
         $form = json_decode((string) file_get_contents(__DIR__ . '/form.json'), true);
-        $id = $this->SunsetVariable();
-        if ($id > 0) {
-            $ts = (int) GetValue($id);
-            $info = sprintf($this->Translate('Sunset from variable #%d: today %s'), $id, $ts > 0 ? date('H:i', $ts) : '–');
+        $info = [];
+        foreach (['SunsetInfo' => ['Sunset', 'SunsetVariableID', 'Sunset'], 'SunriseInfo' => ['Sunrise', 'SunriseVariableID', 'Sunrise']] as $name => [$ident, $prop, $label]) {
+            $id = $this->SunVariable($ident, $prop);
+            if ($id > 0) {
+                $ts = (int) GetValue($id);
+                $info[$name] = sprintf($this->Translate($label . ' from variable #%d: today %s'), $id, $ts > 0 ? date('H:i', $ts) : '–');
+            } else {
+                $info[$name] = $this->Translate('No ' . strtolower($label) . ' variable found (Core Instances → Location).');
+            }
+        }
+        if ($this->ReadPropertyInteger('SeasonMode') === 2) {
+            $year = (int) date('Y');
+            $info['SeasonInfo'] = sprintf($this->Translate('1st Advent: %s'), date('d.m.Y', DekoLogic::FirstAdvent($year)));
         } else {
-            $info = $this->Translate('No sunset variable found (Core Instances → Location).');
+            $info['SeasonInfo'] = '';
         }
         $form['elements'] = $this->WalkForm($form['elements'], static function (array $el) use ($info): array {
-            if (($el['name'] ?? '') === 'SunsetInfo') {
-                $el['caption'] = $info;
+            $name = (string) ($el['name'] ?? '');
+            if (isset($info[$name]) && ($el['type'] ?? '') === 'Label') {
+                $el['caption'] = $info[$name];
             }
             return $el;
         });
@@ -692,31 +806,38 @@ class Dekosteuerung extends IPSModuleStrict
         $data['force'] = (bool) $this->GetValue('ForcePresence');
         $data['multiple'] = (bool) $this->GetValue('AllowMultiple');
         $data['lightsOn'] = (bool) $this->GetValue('Lights');
-        $data['lamps'] = array_map(fn (int $id): array => [
-            'name' => $this->LightName($id),
-            'on'   => IPS_VariableExists($id) && (bool) GetValue($id),
-        ], array_values(array_filter($this->LightIDs(), 'IPS_VariableExists')));
+        $lamps = [];
+        foreach ($this->LampRows() as $id => $row) {
+            if (IPS_VariableExists($id)) {
+                $lamps[] = ['name' => $this->LightName($id), 'on' => $this->LampOn($id), 'until' => $row['OffTime'], 'morning' => $row['Morning']];
+            }
+        }
+        $data['lamps'] = $lamps;
         $data['unconfirmed'] = json_decode($this->ReadAttributeString('Unconfirmed'), true) ?: [];
         $data['lastSwitch'] = $this->ReadAttributeInteger('LastSwitch');
         $data['lastTarget'] = $this->ReadAttributeString('LastSwitchTarget');
         $data['lastReason'] = $this->ReadAttributeString('LastSwitchReason');
         $data['onSince'] = $this->ReadAttributeString('LastTarget') === DekoLogic::TARGET_ON ? $this->ReadAttributeInteger('OnSince') : 0;
         $data['minRun'] = max(0, $this->ReadPropertyInteger('MinOnMinutes')) * 60;
-        $data['timeOn'] = date('H:i', (int) $this->GetValue('TimeOn'));
-        $data['timeOff'] = date('H:i', (int) $this->GetValue('TimeOff'));
         $data['luxOn'] = (int) $this->GetValue('LuxOn');
         $data['luxOff'] = (int) $this->GetValue('LuxOff');
 
         if ($ctx !== null && $result !== null) {
-            $window = DekoLogic::Window($ctx['sec'], $ctx['on'], $ctx['off']);
             $data['status'] = $result['status'];
             $data['statusText'] = $this->StatusText($result['status']);
             $data['reason'] = vsprintf($this->Translate($result['reason']), $result['args']);
-            $data['window'] = $window['active'];
-            $data['overMidnight'] = $window['overMidnight'];
+            $data['timeOn'] = DekoLogic::Clock($ctx['windowOn']);
+            $data['timeOff'] = DekoLogic::Clock($ctx['windowOff']);
+            $data['window'] = $ctx['windowActive'];
+            $data['morningWindow'] = $ctx['morning'];
+            $data['weekend'] = $ctx['weekend'];
+            $data['overMidnight'] = $ctx['overMidnight'];
+            $data['inSeason'] = $ctx['inSeason'];
+            $data['seasonStart'] = $ctx['seasonStart'];
             $data['present'] = $ctx['present'];
             $data['presenceSensor'] = $ctx['presenceSensor'];
-            $data['vacation'] = $ctx['vacation'];
+            $data['vacation'] = $ctx['vacationActive'];
+            $data['simulation'] = $ctx['simulation'];
             $data['hasSensor'] = $ctx['hasSensor'];
             $data['sensorOk'] = $ctx['sensorOk'];
             // Wert gerundet: weniger Kachel-Updates bei unruhigem Sensor
@@ -725,9 +846,16 @@ class Dekosteuerung extends IPSModuleStrict
             $data['trend'] = DekoLogic::Trend($ctx['history']);
             $data['bright'] = $ctx['bright'];
             $data['sunset'] = $ctx['sunset'];
+            $data['sunrise'] = $ctx['morning'] ? $ctx['sunrise'] : 0;
             $data['onToday'] = $ctx['onToday'];
-        } elseif (isset($data['status'])) {
-            $data['statusText'] = $this->StatusText((int) $data['status']);
+        } else {
+            if (!isset($data['timeOn'])) {
+                $data['timeOn'] = date('H:i', (int) $this->GetValue('TimeOn'));
+                $data['timeOff'] = date('H:i', (int) $this->GetValue('TimeOff'));
+            }
+            if (isset($data['status'])) {
+                $data['statusText'] = $this->StatusText((int) $data['status']);
+            }
         }
 
         $json = (string) json_encode($data);
@@ -760,6 +888,9 @@ class Dekosteuerung extends IPSModuleStrict
             201     => $this->Translate('A light is missing or has no action'),
             202     => $this->Translate('A sensor variable does not exist'),
             203     => $this->Translate('No trigger: select a brightness sensor or use the sunset'),
+            204     => $this->Translate('A switch-off time in the light list is invalid (HH:MM)'),
+            205     => $this->Translate('Morning window: start must be before end'),
+            206     => $this->Translate('Season: invalid date'),
             default => $this->Translate('Not configured'),
         };
     }

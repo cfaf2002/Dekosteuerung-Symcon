@@ -81,7 +81,7 @@ trait DekoImportTrait
             if (!HasAction($id)) {
                 $notes[] = sprintf($this->Translate('Light #%d has no action – please check it.'), $id);
             }
-            $rows[] = ['VariableID' => $id];
+            $rows[] = ['VariableID' => $id, 'Name' => '', 'OffTime' => '', 'Morning' => true, 'Level' => 100];
         }
         if ($rows !== []) {
             $this->UpdateFormField('Lights', 'values', (string) json_encode($rows));

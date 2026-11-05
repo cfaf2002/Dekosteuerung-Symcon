@@ -2,7 +2,7 @@
 
 [![IP-Symcon ab 8.1](https://img.shields.io/badge/IP--Symcon-ab_8.1-0b6fb3.svg)](https://www.symcon.de)
 [![Optimiert für Symcon 9.0](https://img.shields.io/badge/optimiert_f%C3%BCr-Symcon_9.0-0b6fb3.svg)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
-[![Modul-Version 1.2 (Build 3)](https://img.shields.io/badge/Modul--Version-1.2_(Build_3)-informational.svg)](library.json)
+[![Modul-Version 2.0 (Build 4)](https://img.shields.io/badge/Modul--Version-2.0_(Build_4)-informational.svg)](library.json)
 [![Tests](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml/badge.svg)](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml)
 [![PHP 8.3 und 8.5](https://img.shields.io/badge/PHP-8.3_%7C_8.5-777bb4.svg?logo=php&logoColor=white)](https://www.php.net)
 [![SDK: IPSModuleStrict](https://img.shields.io/badge/SDK-IPSModuleStrict-success.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/module/)
@@ -12,6 +12,9 @@
 ![Sprachen: Deutsch | Englisch](https://img.shields.io/badge/Sprachen-Deutsch_%7C_Englisch-blueviolet.svg)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-green.svg)](LICENSE)
 ![Auslöser](https://img.shields.io/badge/Ausl%C3%B6ser-D%C3%A4mmerung_%7C_Sonnenuntergang-f2b544.svg)
+![Saison](https://img.shields.io/badge/Saison-ab_1._Advent_%7C_Datumsbereich-c0392b.svg)
+![Urlaub](https://img.shields.io/badge/Urlaub-Anwesenheitssimulation-0f766e.svg)
+![Dimmer](https://img.shields.io/badge/Lampen-Schalter_%7C_Dimmer_%7C_eigene_Zeiten-f2b544.svg)
 ![Ohne Tagesreset-Ereignis](https://img.shields.io/badge/Tagesreset-eingebaut-0f766e.svg)
 ![Umstieg](https://img.shields.io/badge/Umstieg-Skript_per_Knopfdruck_%C3%BCbernehmen-blue.svg)
 ![Ohne Cloud](https://img.shields.io/badge/Cloud-nicht_n%C3%B6tig-brightgreen.svg)
@@ -39,7 +42,13 @@ Autor: Armin Frohwerk · Lizenz: MIT
 
 - **Einschalten** im Zeitfenster (auch über Mitternacht), wenn es dunkler als die Einschaltgrenze ist **oder** der Sonnenuntergang erreicht ist (Versatz einstellbar).
 - **Ausschalten** am Ende des Zeitfensters, bei Abwesenheit oder wenn es dauerhaft heller als die Ausschaltgrenze ist (z. B. 3 der letzten 5 Messwerte). Bei Abwesenheit und Helligkeit gilt eine **Mindestlaufzeit**.
-- **Urlaub** sperrt das Einschalten, Ausschalten bleibt erlaubt.
+- **Wochenende:** eigene Ausschaltzeit für Freitag- und Samstagabend (oder Samstag/Sonntag).
+- **Morgenfenster:** auf Wunsch auch morgens einschalten, solange es dunkel ist – bis zu einer festen Zeit oder bis Sonnenaufgang, auf Wunsch nur werktags.
+- **Saison:** ganzjährig, in einem Datumsbereich (auch über den Jahreswechsel) oder automatisch ab dem 1. Advent bis zu einem Enddatum.
+- **Urlaub:** sperrt das Einschalten – oder simuliert Anwesenheit: Das Licht geht wie gewohnt an und aus, aber mit zufälligem Versatz.
+- **Lampengruppen:** je Lampe ein eigener Name, eine frühere Ausschaltzeit (z. B. Garten um 23:00) und ob sie morgens mitschaltet.
+- **Dimmer:** Neben Schaltern auch Dimmvariablen; eingeschaltet wird mit dem Dimmwert der Lampe.
+- **Benachrichtigung** per Visualisierung, wenn eine Lampe nicht zurückmeldet oder der Helligkeitssensor ausfällt.
 - **Anwesenheit erzwingen**, wenn der Präsenzmelder sich irrt.
 - **Einmal pro Abend** oder – mit „Mehrfachschaltungen erlauben“ – erneut nach jedem automatischen Ausschalten.
 - **Sensorausfall:** Liefert der Helligkeitssensor zu lange keinen Wert, wird nur noch über den Sonnenuntergang eingeschaltet; die Kachel zeigt seit wann.
@@ -54,8 +63,8 @@ Autor: Armin Frohwerk · Lizenz: MIT
 - Basisklasse `IPSModuleStrict`, alle Befehle typisiert
 - Variablen mit Darstellungen (keine eigenen Profile; Zeiten nutzen das Systemprofil `~UnixTimestampTime`)
 - Kachel über das HTML-SDK, Farbschema Symcon-Design, Dunkel oder Hell
-- Lampen: Schaltvariablen (Boolean) mit Aktion, z. B. KNX-Schaltaktoren oder Homematic-IP-Steckdosen
-- Optional: Helligkeitssensor (Lux), Präsenz- und Urlaubsvariable, Location-Instanz für den Sonnenuntergang
+- Lampen: Schalt- (Boolean) oder Dimmvariablen (Integer/Float) mit Aktion, z. B. KNX-Aktoren oder Homematic-IP-Steckdosen
+- Optional: Helligkeitssensor (Lux), Präsenz- und Urlaubsvariable, Location-Instanz für Sonnenauf- und -untergang
 
 ## 3. Installation
 
@@ -66,21 +75,24 @@ Autor: Armin Frohwerk · Lizenz: MIT
 
 ## 4. So entscheidet das Modul
 
-Geprüft wird jede Minute und sofort, wenn sich Helligkeit, Anwesenheit, Urlaub, Sonnenuntergang oder eine Einstellung der Instanz ändert. Die erste zutreffende Zeile gilt:
+Geprüft wird jede Minute und sofort, wenn sich Helligkeit, Anwesenheit, Urlaub, Sonnenauf- oder -untergang oder eine Einstellung der Instanz ändert. Das aktive Zeitfenster ist das Morgenfenster (falls an und gerade aktiv), sonst das Abendfenster mit der Ausschaltzeit des jeweiligen Abends. Die erste zutreffende Zeile gilt:
 
 | Lage | Ziel | Status |
 |---|---|---|
 | Automatik aus | nichts tun | Automatik aus |
+| Außerhalb der Saison | **aus** | Außerhalb der Saison |
 | Außerhalb des Zeitfensters | **aus** (auch während der Mindestlaufzeit) | Außerhalb des Zeitfensters |
 | Niemand anwesend | **aus** nach der Mindestlaufzeit | Niemand anwesend / Mindestlaufzeit läuft |
 | Dauerhaft hell (nur bei funktionierendem Sensor) | **aus** nach der Mindestlaufzeit | Zu hell / Mindestlaufzeit läuft |
 | Licht ist schon an | nichts tun | Licht an |
-| Urlaub | nichts tun (kein Einschalten) | Urlaub |
-| Weder dunkel genug noch Sonnenuntergang | nichts tun | Warte auf Dämmerung |
+| Urlaub (Sperre) | nichts tun (kein Einschalten) | Urlaub |
+| Weder dunkel genug noch Sonnenuntergang (morgens: vor Sonnenaufgang) | nichts tun | Warte auf Dämmerung |
 | Heute schon eingeschaltet, Mehrfach aus | nichts tun | Tageslimit erreicht |
 | sonst | **an** | Licht an |
 
 Geschaltet wird nur, wenn sich das Ziel ändert (Flanke). Mit „Ziel bei jeder Prüfung durchsetzen“ verhält sich das Modul wie das alte Skript und stellt von Hand geänderte Lampen bei jeder Prüfung zurück.
+
+Mit Urlaubssimulation zählt das Haus als bewohnt; jeder Wechsel des Ziels wird erst nach einem zufälligen Versatz (bis zur eingestellten Zeit) umgesetzt, Status „Urlaubssimulation“. Lampen mit eigener Ausschaltzeit gehen am Abend einmal zu ihrer Zeit aus und werden bei einem späteren Einschalten an diesem Abend ausgelassen.
 
 Beim ersten Lauf nach dem Anlegen wird ein Ziel „aus“ nur gemerkt, nicht geschaltet – das Modul schaltet also nicht mittags überraschend Lampen aus.
 
@@ -88,16 +100,21 @@ Beim ersten Lauf nach dem Anlegen wird ein Ziel „aus“ nur gemerkt, nicht ges
 
 | Bereich | Einstellung | Standard |
 |---|---|---|
-| Lampen | Liste der Schaltvariablen, optional mit eigenem Namen für die Kachel | – |
+| Lampen | Liste der Schalt- oder Dimmvariablen; je Lampe: Name in der Kachel, „Aus um“ (HH:MM), Morgens, Dimmwert | –, –, an, 100 |
 | Auslöser | Helligkeitssensor (Lux) | – |
 | | Sensor gilt als ausgefallen ohne neuen Wert nach | 180 min |
 | | Dauerhaft hell: Werte über der Ausschaltgrenze (von den letzten 5, ein Wert alle 5 min) | 3 |
 | | Auch bei Sonnenuntergang einschalten | an |
 | | Sonnenuntergang-Variable (leer = aus Kern Instanzen → Location), Versatz | leer, 0 min |
+| Zeiten und Saison | Eigene Ausschaltzeit für die Abende von … (Freitag/Samstag, Samstag/Sonntag, Freitag–Sonntag) | keine |
+| | Morgenfenster: von, spätestens bis, mit Sonnenaufgang beenden, nur Montag–Freitag | aus · 06:00 · 08:00 · an · aus |
+| | Sonnenaufgang-Variable (leer = aus Location) | leer |
+| | Saison: ganzjährig, Datumsbereich, ab dem 1. Advent; Beginn und Ende (Tag, Monat) | ganzjährig · 15.11. · 06.01. |
 | Bedingungen | Anwesenheit (leer = immer anwesend) | – |
-| | Urlaub | – |
+| | Urlaub; im Urlaub: Einschalten sperren oder Anwesenheit simulieren, Zufallsversatz bis | –, sperren, 20 min |
 | | Mindestlaufzeit | 30 min |
 | | Ziel bei jeder Prüfung durchsetzen | aus |
+| Benachrichtigung | bei fehlender Rückmeldung, bei Sensorausfall, Visualisierung (leer = erste gefundene), Testnachricht | aus, aus, leer |
 | Kachel | Eigene Kachel, Farbschema der Kachel | an, Symcon-Design |
 
 Zeiten, Grenzwerte und die Schalter „Anwesenheit erzwingen“ und „Mehrfachschaltungen erlauben“ sind Variablen der Instanz (siehe unten) und lassen sich direkt in der Visualisierung ändern. Die Ausschaltgrenze wird nie kleiner als die Einschaltgrenze; wer eine Grenze verschiebt, zieht die andere mit.
@@ -106,8 +123,8 @@ Zeiten, Grenzwerte und die Schalter „Anwesenheit erzwingen“ und „Mehrfachs
 
 - Kopfzeile mit Status, Begründung (bei „Licht an“: warum und seit wann) und Schalter für alle Lampen
 - Lampen einzeln mit „x von y an“; lange Namen werden gekürzt (voller Name beim Darüberfahren)
-- Helligkeit mit Trend (↗ ↘ →) und Balken mit Ein- und Ausschaltgrenze, Sonnenuntergang mit Countdown, Zeitfenster, Restzeit der Mindestlaufzeit
-- Hinweise nur, wenn sie zutreffen: niemand anwesend, Anwesenheit erzwungen, Urlaub, Tageslimit, dauerhaft hell
+- Helligkeit mit Trend (↗ ↘ →) und Balken mit Ein- und Ausschaltgrenze, Sonnenuntergang (im Morgenfenster Sonnenaufgang) mit Countdown, aktives Zeitfenster (Abend, Wochenende oder Morgen), Restzeit der Mindestlaufzeit
+- Hinweise nur, wenn sie zutreffen: niemand anwesend, Anwesenheit erzwungen, Urlaub oder Urlaubssimulation, Tageslimit, dauerhaft hell
 - Schalter für Automatik, Anwesenheit erzwingen und Mehrfach
 - Kleine Kacheln zeigen nur Status, Werte und Schalter
 - Hinweise bei Sensorausfall und fehlender Rückmeldung einer Lampe
@@ -124,19 +141,20 @@ Die Kachel bekommt nur Daten (JSON) und setzt alle Texte per `textContent`. Der 
 | `Reason` | Letzte Entscheidung | String | Wertanzeige | – |
 | `TimeOn` | Einschaltzeitpunkt | Integer | `~UnixTimestampTime` | ja |
 | `TimeOff` | Ausschaltzeitpunkt | Integer | `~UnixTimestampTime` | ja |
+| `TimeOffWeekend` | Ausschaltzeitpunkt Wochenende (nur mit Wochenend-Einstellung) | Integer | `~UnixTimestampTime` | ja |
 | `LuxOn` | Dämmerung Einschaltgrenze | Integer | Schieberegler (lx) | ja |
 | `LuxOff` | Dämmerung Ausschaltgrenze | Integer | Schieberegler (lx) | ja |
 | `ForcePresence` | Anwesenheit erzwingen | Boolean | Schalter | ja |
 | `AllowMultiple` | Mehrfachschaltungen erlauben | Boolean | Schalter | ja |
 
-Status-Werte: 0 Automatik aus · 1 Warte auf Dämmerung · 2 Licht an · 3 Außerhalb des Zeitfensters · 4 Niemand anwesend · 5 Urlaub · 6 Tageslimit erreicht · 7 Zu hell · 8 Mindestlaufzeit läuft
+Status-Werte: 0 Automatik aus · 1 Warte auf Dämmerung · 2 Licht an · 3 Außerhalb des Zeitfensters · 4 Niemand anwesend · 5 Urlaub · 6 Tageslimit erreicht · 7 Zu hell · 8 Mindestlaufzeit läuft · 9 Außerhalb der Saison · 10 Urlaubssimulation
 
 ## 8. PHP-Befehle
 
 ```php
 DEKO_Evaluate(int $InstanceID): bool                 // sofort prüfen
 DEKO_SetLights(int $InstanceID, bool $On): bool      // alle Lampen von Hand schalten
-DEKO_SetAutomatic(int $InstanceID, bool $Active): void
+DEKO_SetAutomatic(int $InstanceID, bool $Active): void  // Automatik ein/aus
 ```
 
 ## 9. Umstieg vom bisherigen Skript
@@ -152,7 +170,8 @@ DEKO_SetAutomatic(int $InstanceID, bool $Active): void
 ## 10. Sicherheit und Geschwindigkeit
 
 - Das bisherige Skript wird bei der Übernahme nur gelesen, nie ausgeführt; Kommentare werden vorher entfernt.
-- Keine Netzwerkzugriffe, keine Zugangsdaten.
+- Keine Netzwerkzugriffe, keine Zugangsdaten. Benachrichtigungen laufen über die eigene Visualisierung.
+- Der Zufallsversatz der Urlaubssimulation nutzt `random_int` (kryptografisch sicherer Zufall).
 - Variablen werden nur bei Änderung geschrieben, die Kachel nur bei geänderten Daten aktualisiert (Helligkeit auf 10 lx gerundet).
 - Kein `IPS_Sleep`: die Rückmeldung der Lampen prüft ein Timer nach fünf Sekunden, die Bewertung blockiert nicht.
 - Kacheldaten werden mit `JSON_HEX_*` eingebettet, Texte in der Kachel nur per `textContent` gesetzt.
@@ -161,6 +180,7 @@ DEKO_SetAutomatic(int $InstanceID, bool $Active): void
 
 | Version | Build | Datum | Beschreibung |
 |---|---|---|---|
+| 2.0 | 4 | 05.11.2026 | Saison (Datumsbereich oder ab 1. Advent), Morgenfenster bis Sonnenaufgang, eigene Ausschaltzeit am Wochenende, Urlaub mit Anwesenheitssimulation (Zufallsversatz), je Lampe eigene Ausschaltzeit und Morgen-Teilnahme, Dimmer, Benachrichtigung bei fehlender Rückmeldung oder Sensorausfall |
 | 1.2 | 3 | 05.11.2026 | Kachel kompakter: Lichtschalter in der Kopfzeile, „x von y an“, Werte in einer flachen Reihe, nur zutreffende Hinweise, kurze Schalter; bei „Licht an“ Grund und Uhrzeit; passt sich kleinen und schmalen Kacheln an |
 | 1.1 | 2 | 05.11.2026 | Kachel: Platz für den Instanznamen von Symcon, Begründung nicht doppelt, außerhalb des Zeitfensters „Einschalten frühestens ab …“; Lampenliste mit eigenen Namen für die Kachel |
 | 1.0 | 1 | 05.11.2026 | Erste Version: Ablösung des Skripts „Lichtsteuerung Dashboard 2.0“ samt Tagesreset und Ereignissen; Flankensteuerung, eingebauter Tagesreset, Rückmeldeprüfung, Kachel, Übernahme aus dem Skript |

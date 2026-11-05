@@ -17,7 +17,7 @@
                 {
                     "type": "List",
                     "name": "Lights",
-                    "caption": "Lights to switch (switch variables with action)",
+                    "caption": "Lights to switch (switch or dimmer variables with action)",
                     "rowCount": 6,
                     "add": true,
                     "delete": true,
@@ -25,14 +25,12 @@
                         {
                             "caption": "Variable",
                             "name": "VariableID",
-                            "width": "450px",
+                            "width": "320px",
                             "add": 0,
                             "edit": {
                                 "type": "SelectVariable",
                                 "requiredAction": 1,
-                                "validVariableTypes": [
-                                    0
-                                ]
+                                "validVariableTypes": [0, 1, 2]
                             }
                         },
                         {
@@ -43,16 +41,50 @@
                             "edit": {
                                 "type": "ValidationTextBox"
                             }
+                        },
+                        {
+                            "caption": "Off at (HH:MM, optional)",
+                            "name": "OffTime",
+                            "width": "150px",
+                            "add": "",
+                            "edit": {
+                                "type": "ValidationTextBox",
+                                "validate": "^$|^([01]?[0-9]|2[0-3])[:.][0-5][0-9]$"
+                            }
+                        },
+                        {
+                            "caption": "Morning",
+                            "name": "Morning",
+                            "width": "90px",
+                            "add": true,
+                            "edit": {
+                                "type": "CheckBox"
+                            }
+                        },
+                        {
+                            "caption": "Dim level (dimmers only)",
+                            "name": "Level",
+                            "width": "170px",
+                            "add": 100,
+                            "edit": {
+                                "type": "NumberSpinner",
+                                "minimum": 1,
+                                "maximum": 255
+                            }
                         }
                     ],
                     "values": []
+                },
+                {
+                    "type": "Label",
+                    "caption": "\"Off at\" switches a single light off earlier in the evening (e.g. the garden at 23:00 while the windows stay on). \"Morning\" decides whether the light takes part in the morning window. Dimmers are switched on with the dim level and off with 0."
                 }
             ]
         },
         {
             "type": "ExpansionPanel",
             "caption": "Triggers",
-            "expanded": true,
+            "expanded": false,
             "items": [
                 {
                     "type": "SelectVariable",
@@ -113,8 +145,153 @@
         },
         {
             "type": "ExpansionPanel",
+            "caption": "Times and season",
+            "expanded": false,
+            "items": [
+                {
+                    "type": "Label",
+                    "caption": "Switch-on and switch-off time are variables of the instance (visualization)."
+                },
+                {
+                    "type": "Select",
+                    "name": "WeekendMode",
+                    "caption": "Own switch-off time for the evenings of",
+                    "width": "400px",
+                    "options": [
+                        { "caption": "– none –", "value": 0 },
+                        { "caption": "Friday and Saturday", "value": 1 },
+                        { "caption": "Saturday and Sunday", "value": 2 },
+                        { "caption": "Friday, Saturday and Sunday", "value": 3 }
+                    ]
+                },
+                {
+                    "type": "Label",
+                    "caption": "The weekend switch-off time is the instance variable \"Switch-off time at the weekend\"."
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "MorningEnabled",
+                    "caption": "Morning window: also switch on in the morning while it is dark"
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        {
+                            "type": "SelectTime",
+                            "name": "MorningFrom",
+                            "caption": "From"
+                        },
+                        {
+                            "type": "SelectTime",
+                            "name": "MorningTo",
+                            "caption": "Until at the latest"
+                        },
+                        {
+                            "type": "CheckBox",
+                            "name": "MorningUntilSunrise",
+                            "caption": "End at sunrise"
+                        },
+                        {
+                            "type": "CheckBox",
+                            "name": "MorningWorkdays",
+                            "caption": "Mondays to Fridays only"
+                        }
+                    ]
+                },
+                {
+                    "type": "SelectVariable",
+                    "name": "SunriseVariableID",
+                    "caption": "Sunrise variable (empty = from Location)",
+                    "width": "400px"
+                },
+                {
+                    "type": "Label",
+                    "name": "SunriseInfo",
+                    "caption": ""
+                },
+                {
+                    "type": "Select",
+                    "name": "SeasonMode",
+                    "caption": "Season",
+                    "width": "400px",
+                    "options": [
+                        { "caption": "All year round", "value": 0 },
+                        { "caption": "Date range", "value": 1 },
+                        { "caption": "From the 1st Advent", "value": 2 }
+                    ]
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        {
+                            "type": "NumberSpinner",
+                            "name": "SeasonStartDay",
+                            "caption": "From day",
+                            "minimum": 1,
+                            "maximum": 31
+                        },
+                        {
+                            "type": "Select",
+                            "name": "SeasonStartMonth",
+                            "caption": "Month",
+                            "options": [
+                                { "caption": "January", "value": 1 },
+                                { "caption": "February", "value": 2 },
+                                { "caption": "March", "value": 3 },
+                                { "caption": "April", "value": 4 },
+                                { "caption": "May", "value": 5 },
+                                { "caption": "June", "value": 6 },
+                                { "caption": "July", "value": 7 },
+                                { "caption": "August", "value": 8 },
+                                { "caption": "September", "value": 9 },
+                                { "caption": "October", "value": 10 },
+                                { "caption": "November", "value": 11 },
+                                { "caption": "December", "value": 12 }
+                            ]
+                        },
+                        {
+                            "type": "NumberSpinner",
+                            "name": "SeasonEndDay",
+                            "caption": "Until day",
+                            "minimum": 1,
+                            "maximum": 31
+                        },
+                        {
+                            "type": "Select",
+                            "name": "SeasonEndMonth",
+                            "caption": "Month",
+                            "options": [
+                                { "caption": "January", "value": 1 },
+                                { "caption": "February", "value": 2 },
+                                { "caption": "March", "value": 3 },
+                                { "caption": "April", "value": 4 },
+                                { "caption": "May", "value": 5 },
+                                { "caption": "June", "value": 6 },
+                                { "caption": "July", "value": 7 },
+                                { "caption": "August", "value": 8 },
+                                { "caption": "September", "value": 9 },
+                                { "caption": "October", "value": 10 },
+                                { "caption": "November", "value": 11 },
+                                { "caption": "December", "value": 12 }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "Label",
+                    "name": "SeasonInfo",
+                    "caption": ""
+                },
+                {
+                    "type": "Label",
+                    "caption": "With \"From the 1st Advent\" only the end date counts. Outside the season the lights are switched off once and the automatic rests."
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
             "caption": "Conditions",
-            "expanded": true,
+            "expanded": false,
             "items": [
                 {
                     "type": "SelectVariable",
@@ -125,8 +302,31 @@
                 {
                     "type": "SelectVariable",
                     "name": "VacationVariableID",
-                    "caption": "Vacation (true = blocks switching on; switching off still works)",
+                    "caption": "Vacation (true = on vacation)",
                     "width": "600px"
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        {
+                            "type": "Select",
+                            "name": "VacationMode",
+                            "caption": "During vacation",
+                            "width": "420px",
+                            "options": [
+                                { "caption": "Block switching on (switching off still works)", "value": 0 },
+                                { "caption": "Simulate presence (switch with random delay)", "value": 1 }
+                            ]
+                        },
+                        {
+                            "type": "NumberSpinner",
+                            "name": "RandomMinutes",
+                            "caption": "Random delay up to",
+                            "suffix": "min",
+                            "minimum": 0,
+                            "maximum": 120
+                        }
+                    ]
                 },
                 {
                     "type": "NumberSpinner",
@@ -145,6 +345,39 @@
         },
         {
             "type": "ExpansionPanel",
+            "caption": "Notification",
+            "expanded": false,
+            "items": [
+                {
+                    "type": "CheckBox",
+                    "name": "NotifyUnconfirmed",
+                    "caption": "Notify when a light does not confirm the switching"
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "NotifySensor",
+                    "caption": "Notify when the brightness sensor fails"
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        {
+                            "type": "SelectInstance",
+                            "name": "NotifyTarget",
+                            "caption": "Visualization (empty = first one found)",
+                            "width": "400px"
+                        },
+                        {
+                            "type": "Button",
+                            "caption": "Send test message",
+                            "onClick": "IPS_RequestAction($id, 'TestNotify', 0);"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
             "caption": "Tile",
             "expanded": false,
             "items": [
@@ -158,18 +391,9 @@
                     "name": "TileTheme",
                     "caption": "Colour scheme of the tile",
                     "options": [
-                        {
-                            "caption": "Symcon design (colours of the visualization)",
-                            "value": 0
-                        },
-                        {
-                            "caption": "Dark",
-                            "value": 1
-                        },
-                        {
-                            "caption": "Light",
-                            "value": 2
-                        }
+                        { "caption": "Symcon design (colours of the visualization)", "value": 0 },
+                        { "caption": "Dark", "value": 1 },
+                        { "caption": "Light", "value": 2 }
                     ]
                 }
             ]
@@ -225,35 +449,14 @@
         }
     ],
     "status": [
-        {
-            "code": 102,
-            "icon": "active",
-            "caption": "Active"
-        },
-        {
-            "code": 104,
-            "icon": "inactive",
-            "caption": "Instance is inactive"
-        },
-        {
-            "code": 200,
-            "icon": "error",
-            "caption": "Please add the lights"
-        },
-        {
-            "code": 201,
-            "icon": "error",
-            "caption": "A light is missing or has no action"
-        },
-        {
-            "code": 202,
-            "icon": "error",
-            "caption": "A sensor variable does not exist"
-        },
-        {
-            "code": 203,
-            "icon": "error",
-            "caption": "No trigger: select a brightness sensor or use the sunset"
-        }
+        { "code": 102, "icon": "active", "caption": "Active" },
+        { "code": 104, "icon": "inactive", "caption": "Instance is inactive" },
+        { "code": 200, "icon": "error", "caption": "Please add the lights" },
+        { "code": 201, "icon": "error", "caption": "A light is missing or has no action" },
+        { "code": 202, "icon": "error", "caption": "A sensor variable does not exist" },
+        { "code": 203, "icon": "error", "caption": "No trigger: select a brightness sensor or use the sunset" },
+        { "code": 204, "icon": "error", "caption": "A switch-off time in the light list is invalid (HH:MM)" },
+        { "code": 205, "icon": "error", "caption": "Morning window: start must be before end" },
+        { "code": 206, "icon": "error", "caption": "Season: invalid date" }
     ]
 }
