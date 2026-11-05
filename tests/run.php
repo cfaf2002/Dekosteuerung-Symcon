@@ -105,6 +105,7 @@ $r = decide(['sensorOk' => false, 'lux' => null, 'sunsetReached' => true]);
 check($r['target'] === 'on', 'Sensorfehler, Sonnenuntergang erreicht: an');
 $r = decide(['lux' => 500.0, 'now' => at('12:00')]);
 check($r['target'] === 'off' && $r['status'] === DekoLogic::ST_WINDOW, 'Dunkel außerhalb des Fensters: Ziel aus');
+check($r['args'] === ['16:00'], 'Grund nennt die Einschaltzeit');
 $r = decide(['lux' => 500.0, 'vacation' => true]);
 check($r['target'] === null && $r['status'] === DekoLogic::ST_VACATION, 'Urlaub sperrt das Einschalten');
 $r = decide(['lux' => 500.0, 'present' => false]);

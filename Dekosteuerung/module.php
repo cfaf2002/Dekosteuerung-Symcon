@@ -464,6 +464,11 @@ class Dekosteuerung extends IPSModuleStrict
 
     private function LightName(int $id): string
     {
+        foreach (json_decode($this->ReadPropertyString('Lights'), true) ?: [] as $row) {
+            if ((int) ($row['VariableID'] ?? 0) === $id && trim((string) ($row['Name'] ?? '')) !== '') {
+                return trim((string) $row['Name']);
+            }
+        }
         $name = IPS_GetName($id);
         if (in_array(mb_strtolower(trim($name)), self::GENERIC_NAMES, true)) {
             $parent = IPS_GetParent($id);

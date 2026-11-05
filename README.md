@@ -2,7 +2,7 @@
 
 [![IP-Symcon ab 8.1](https://img.shields.io/badge/IP--Symcon-ab_8.1-0b6fb3.svg)](https://www.symcon.de)
 [![Optimiert für Symcon 9.0](https://img.shields.io/badge/optimiert_f%C3%BCr-Symcon_9.0-0b6fb3.svg)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
-[![Modul-Version 1.0 (Build 1)](https://img.shields.io/badge/Modul--Version-1.0_(Build_1)-informational.svg)](library.json)
+[![Modul-Version 1.1 (Build 2)](https://img.shields.io/badge/Modul--Version-1.1_(Build_2)-informational.svg)](library.json)
 [![Tests](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml/badge.svg)](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml)
 [![PHP 8.3 und 8.5](https://img.shields.io/badge/PHP-8.3_%7C_8.5-777bb4.svg?logo=php&logoColor=white)](https://www.php.net)
 [![SDK: IPSModuleStrict](https://img.shields.io/badge/SDK-IPSModuleStrict-success.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/module/)
@@ -88,7 +88,7 @@ Beim ersten Lauf nach dem Anlegen wird ein Ziel „aus“ nur gemerkt, nicht ges
 
 | Bereich | Einstellung | Standard |
 |---|---|---|
-| Lampen | Liste der Schaltvariablen | – |
+| Lampen | Liste der Schaltvariablen, optional mit eigenem Namen für die Kachel | – |
 | Auslöser | Helligkeitssensor (Lux) | – |
 | | Sensor gilt als ausgefallen ohne neuen Wert nach | 180 min |
 | | Dauerhaft hell: Werte über der Ausschaltgrenze (von den letzten 5, ein Wert alle 5 min) | 3 |
@@ -160,6 +160,7 @@ DEKO_SetAutomatic(int $InstanceID, bool $Active): void
 
 | Version | Build | Datum | Beschreibung |
 |---|---|---|---|
+| 1.1 | 2 | 05.11.2026 | Kachel: Platz für den Instanznamen von Symcon, Begründung nicht doppelt, außerhalb des Zeitfensters „Einschalten frühestens ab …“; Lampenliste mit eigenen Namen für die Kachel |
 | 1.0 | 1 | 05.11.2026 | Erste Version: Ablösung des Skripts „Lichtsteuerung Dashboard 2.0“ samt Tagesreset und Ereignissen; Flankensteuerung, eingebauter Tagesreset, Rückmeldeprüfung, Kachel, Übernahme aus dem Skript |
 
 ## 12. Lizenz

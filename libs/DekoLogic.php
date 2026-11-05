@@ -120,7 +120,7 @@ final class DekoLogic
 
         // Ende des Zeitfensters: immer aus, auch während der Mindestlaufzeit
         if (!$window['active']) {
-            return $out(self::TARGET_OFF, self::ST_WINDOW, 'Outside the time window');
+            return $out(self::TARGET_OFF, self::ST_WINDOW, 'Switching on from %s at the earliest', [gmdate('H:i', $c['on'])]);
         }
 
         if (!$c['present']) {

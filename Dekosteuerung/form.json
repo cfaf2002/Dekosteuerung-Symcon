@@ -25,12 +25,23 @@
                         {
                             "caption": "Variable",
                             "name": "VariableID",
-                            "width": "auto",
+                            "width": "450px",
                             "add": 0,
                             "edit": {
                                 "type": "SelectVariable",
                                 "requiredAction": 1,
-                                "validVariableTypes": [0]
+                                "validVariableTypes": [
+                                    0
+                                ]
+                            }
+                        },
+                        {
+                            "caption": "Name in the tile (optional)",
+                            "name": "Name",
+                            "width": "auto",
+                            "add": "",
+                            "edit": {
+                                "type": "ValidationTextBox"
                             }
                         }
                     ],

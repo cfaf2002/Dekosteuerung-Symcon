@@ -102,7 +102,7 @@ try {
     $presence = variable(0, true);
     $vacation = variable(0, false);
 
-    IPS_SetProperty($id, 'Lights', json_encode([['VariableID' => $lamp1], ['VariableID' => $lamp2]]));
+    IPS_SetProperty($id, 'Lights', json_encode([['VariableID' => $lamp1, 'Name' => ''], ['VariableID' => $lamp2, 'Name' => 'Fensterstern']]));
     IPS_SetProperty($id, 'BrightnessVariableID', $lux);
     IPS_SetProperty($id, 'PresenceVariableID', $presence);
     IPS_SetProperty($id, 'VacationVariableID', $vacation);
@@ -153,6 +153,7 @@ try {
     $tile = DEKO_GetVisualizationTile($id);
     ok(!str_contains($tile, '/*INITIAL_DATA*/'), 'Kachel mit Startdaten');
     ok(str_contains($tile, 'Lichterkette'), 'Kachel kennt die Lampennamen');
+    ok(str_contains($tile, 'Fensterstern'), 'Eigener Name aus der Lampenliste');
 
     // Übernahme aus dem bisherigen Skript
     $old = IPS_CreateScript(0);

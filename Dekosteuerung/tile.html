@@ -44,7 +44,7 @@
         --deko-glow: color-mix(in srgb, var(--brand) 55%, transparent);
         height: 100%;
         overflow-y: auto;
-        padding: 12px;
+        padding: 44px 12px 12px; /* oben Platz für den Instanznamen, den Symcon über die Kachel legt */
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -262,7 +262,12 @@
 
             tile.className = 'tone-' + (TONES[d.status] || 'off');
             setText('status', d.statusText || '–');
-            setText('reason', d.reason || '');
+            var reason = d.reason || '';
+            if (reason.toLowerCase() === (d.statusText || '').toLowerCase()) {
+                reason = '';
+            }
+            setText('reason', reason);
+            $('reason').hidden = reason === '';
 
             $('error').hidden = !d.error;
             setText('error', d.error || '');
