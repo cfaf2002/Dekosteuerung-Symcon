@@ -37,83 +37,84 @@
     }
     /* ===== Ende Kachel-Grundlage ===== */
 
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
     * { box-sizing: border-box; }
 
     #tile {
         --deko-glow: color-mix(in srgb, var(--brand) 55%, transparent);
         height: 100%;
+        overflow-x: hidden;
         overflow-y: auto;
-        padding: 44px 12px 12px; /* oben Platz für den Instanznamen, den Symcon über die Kachel legt */
+        padding: 44px 14px 12px; /* oben Platz für den Instanznamen, den Symcon über die Kachel legt */
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
         font-size: 14px;
-        line-height: 1.35;
+        line-height: 1.3;
     }
 
-    /* Kopf */
-    .head { display: flex; align-items: center; gap: 10px; }
+    /* Kopf: Status links, Lichtschalter rechts */
+    .head { display: flex; align-items: center; gap: 12px; }
+    .head-text { min-width: 0; flex: 1; }
+    .status { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 17px; }
+    .status span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .dot { width: 10px; height: 10px; border-radius: var(--pill); background: var(--off); flex: none; }
     .tone-ok .dot { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
     .tone-warn .dot { background: var(--warn); }
     .tone-bad .dot { background: var(--bad); }
     .tone-info .dot { background: var(--info); }
-    .head-text { min-width: 0; flex: 1; }
-    .status { font-weight: 650; font-size: 16px; }
-    .reason { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    /* Hinweise */
-    .alert { border-radius: var(--radius); padding: 8px 10px; font-size: 13px; background: color-mix(in srgb, var(--warn) 18%, transparent); border-left: 4px solid var(--warn); }
-    .alert.bad { background: color-mix(in srgb, var(--bad) 16%, transparent); border-left-color: var(--bad); }
-    .alert b { display: block; }
-
-    /* Lichtschalter */
-    .light { display: flex; gap: 12px; align-items: center; background: var(--surface); border-radius: var(--radius-l); padding: 10px; }
+    .reason { color: var(--muted); font-size: 13px; margin: 2px 0 0 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #lightBtn {
-        flex: none; width: 64px; height: 64px; border-radius: var(--pill); border: 1px solid var(--line);
+        flex: none; width: 52px; height: 52px; border-radius: var(--pill); border: 1px solid var(--line);
         background: var(--surface); color: var(--muted); cursor: pointer; display: grid; place-items: center;
         transition: background .25s, color .25s, box-shadow .25s;
     }
     #lightBtn:hover { background: var(--surface-hover); }
-    #lightBtn svg { width: 30px; height: 30px; }
-    #lightBtn.on { background: var(--accent); color: var(--on-accent); border-color: transparent; box-shadow: 0 0 22px var(--deko-glow); }
-    .lamps { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-    .lamp { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: var(--pill); background: var(--surface); font-size: 12px; max-width: 100%; }
+    #lightBtn svg { width: 26px; height: 26px; }
+    #lightBtn.on { background: var(--accent); color: var(--on-accent); border-color: transparent; box-shadow: 0 0 18px var(--deko-glow); }
+
+    /* Hinweise */
+    .alert { border-radius: var(--radius-s); padding: 6px 10px; font-size: 13px; background: color-mix(in srgb, var(--warn) 18%, transparent); border-left: 4px solid var(--warn); }
+    .alert.bad { background: color-mix(in srgb, var(--bad) 16%, transparent); border-left-color: var(--bad); }
+    .alert b { font-weight: 650; }
+
+    /* Lampen */
+    .lamps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .lights-label { color: var(--muted); font-size: 12px; margin-right: 2px; }
+    .lamp { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: var(--pill); background: var(--surface); font-size: 12px; min-width: 0; }
     .lamp i { width: 8px; height: 8px; border-radius: var(--pill); background: var(--off); flex: none; }
     .lamp.on i { background: var(--brand); box-shadow: 0 0 6px var(--deko-glow); }
-    .lamp span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lamp span { max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .lamp.miss { outline: 1px solid var(--bad); }
-    .lights-label { font-weight: 600; width: 100%; font-size: 13px; }
 
-    /* Karten */
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--gap); }
-    .card { background: var(--surface); border-radius: var(--radius); padding: 10px; min-width: 0; }
-    .label { color: var(--muted); font-size: 12px; }
-    .value { font-size: 20px; font-weight: 650; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
-
-    .bar { position: relative; height: 8px; border-radius: var(--pill); background: var(--line); margin: 10px 0 4px; }
+    /* Werte */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: var(--gap); }
+    .card { background: var(--surface); border-radius: var(--radius); padding: 8px 10px; min-width: 0; }
+    .label { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .value { font-size: 18px; font-weight: 650; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bar { position: relative; height: 6px; border-radius: var(--pill); background: var(--line); margin: 7px 0 3px; }
     .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--pill); background: var(--accent); width: 0; transition: width .4s; }
-    .bar .mark { position: absolute; top: -4px; width: 2px; height: 16px; background: var(--fg); opacity: .55; }
+    .bar .mark { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--fg); opacity: .5; }
     .bar.fault .fill { background: var(--off); }
     .bar.progress .fill { background: var(--info); }
-    .scale { display: flex; justify-content: space-between; color: var(--faint); font-size: 11px; }
+    .scale { display: flex; justify-content: space-between; gap: 6px; color: var(--faint); font-size: 11px; white-space: nowrap; }
 
-    /* Bedingungen */
+    /* Bedingungen (nur was gerade zutrifft) */
     .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--pill); background: var(--surface); font-size: 12px; }
+    .chips:empty { display: none; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: var(--pill); background: var(--surface); font-size: 12px; }
     .chip i { width: 8px; height: 8px; border-radius: var(--pill); background: var(--off); }
     .chip.yes i { background: var(--ok); }
     .chip.no i { background: var(--bad); }
     .chip.note i { background: var(--warn); }
 
     /* Schalter */
-    .toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--gap); }
+    .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
     .toggle {
-        min-height: 40px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface);
-        color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px;
-        text-align: left;
+        flex: 1 1 auto; min-height: 38px; border-radius: var(--pill); border: 1px solid var(--line); background: var(--surface);
+        color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 4px 6px 4px 14px; text-align: left; white-space: nowrap;
     }
     .toggle:hover { background: var(--surface-hover); }
     .toggle .sw { width: 34px; height: 20px; border-radius: var(--pill); background: var(--line); position: relative; flex: none; transition: background .2s; }
@@ -121,31 +122,43 @@
     .toggle[aria-checked="true"] .sw { background: var(--accent); }
     .toggle[aria-checked="true"] .sw::after { transform: translateX(14px); }
 
-    .foot { color: var(--faint); font-size: 11px; }
+    .foot { color: var(--faint); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .foot:empty { display: none; }
+
+    /* Schmale Kachel: kleinere Werte, damit Uhrzeiten nicht abgeschnitten werden */
+    @media (max-width: 520px) {
+        .stats { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+        .value { font-size: 15px; }
+        .card { padding: 7px 8px; }
+    }
+    /* Kleine Kachel: nur Status, Werte und Schalter */
+    @media (max-height: 340px) {
+        .lamps, .chips, .foot { display: none; }
+    }
+    @media (max-height: 240px) {
+        .stats { display: none; }
+    }
     [hidden] { display: none !important; }
 </style>
 
 <div id="tile" class="tone-off">
     <div class="head">
-        <span class="dot" aria-hidden="true"></span>
         <div class="head-text">
-            <div class="status" id="status">–</div>
+            <div class="status"><i class="dot" aria-hidden="true"></i><span id="status">–</span></div>
             <div class="reason" id="reason"></div>
         </div>
+        <button id="lightBtn" type="button" role="switch" aria-checked="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21h6M10 18h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
     </div>
 
     <div class="alert bad" id="error" hidden></div>
     <div class="alert" id="sensorFault" hidden><b data-t="Brightness sensor not current">Brightness sensor not current</b><span id="faultText"></span></div>
     <div class="alert" id="unconfirmed" hidden><b data-t="No confirmation">No confirmation</b><span id="unconfirmedText"></span></div>
 
-    <div class="light">
-        <button id="lightBtn" type="button" role="switch" aria-checked="false">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21h6M10 18h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="lamps" id="lamps"><div class="lights-label" data-t="Decoration light">Decoration light</div></div>
-    </div>
+    <div class="lamps" id="lamps"><span class="lights-label" id="lightsLabel"></span></div>
 
-    <div class="grid">
+    <div class="stats">
         <div class="card" id="luxCard">
             <div class="label" data-t="Brightness">Brightness</div>
             <div class="value" id="lux">–</div>
@@ -174,7 +187,7 @@
     <div class="toggles">
         <button class="toggle" type="button" role="switch" aria-checked="false" data-ident="Automatic"><span data-t="Automatic">Automatic</span><span class="sw" aria-hidden="true"></span></button>
         <button class="toggle" type="button" role="switch" aria-checked="false" data-ident="ForcePresence"><span data-t="Force presence">Force presence</span><span class="sw" aria-hidden="true"></span></button>
-        <button class="toggle" type="button" role="switch" aria-checked="false" data-ident="AllowMultiple"><span data-t="Allow multiple switch-ons">Allow multiple switch-ons</span><span class="sw" aria-hidden="true"></span></button>
+        <button class="toggle" type="button" role="switch" aria-checked="false" data-ident="AllowMultiple"><span data-t="Multiple">Multiple</span><span class="sw" aria-hidden="true"></span></button>
     </div>
 
     <div class="foot" id="foot"></div>
@@ -263,6 +276,11 @@
             tile.className = 'tone-' + (TONES[d.status] || 'off');
             setText('status', d.statusText || '–');
             var reason = d.reason || '';
+            var isOn = d.status === 2 && d.lastTarget === 'on' && d.lastSwitch;
+            if (isOn) {
+                // Licht an: warum und seit wann eingeschaltet wurde
+                reason = (d.lastReason ? d.lastReason + ' · ' : '') + t('since') + ' ' + clock(d.lastSwitch) + ' ' + t('o\'clock');
+            }
             if (reason.toLowerCase() === (d.statusText || '').toLowerCase()) {
                 reason = '';
             }
@@ -293,9 +311,13 @@
             while (lamps.children.length > 1) {
                 lamps.removeChild(lamps.lastChild);
             }
-            (d.lamps || []).forEach(function (l) {
+            var list = d.lamps || [];
+            var onCount = list.filter(function (l) { return l.on; }).length;
+            setText('lightsLabel', t('Decoration light') + ' · ' + onCount + ' ' + t('of') + ' ' + list.length + ' ' + t('on'));
+            list.forEach(function (l) {
                 var el = document.createElement('span');
                 el.className = 'lamp' + (l.on ? ' on' : '') + (missing.indexOf(l.name) >= 0 ? ' miss' : '');
+                el.title = l.name;
                 var dot = document.createElement('i');
                 var name = document.createElement('span');
                 name.textContent = l.name;
@@ -321,17 +343,24 @@
             }
 
             // Zeitfenster
-            setText('window', (d.timeOn || '–') + ' – ' + (d.timeOff || '–'));
-            setText('windowSub', d.window ? t('active') : t('not active'));
+            setText('window', (d.timeOn || '–') + '–' + (d.timeOff || '–'));
+            setText('windowSub', (d.window ? t('active') : t('not active')) + (d.overMidnight ? ' · ' + t('over midnight') : ''));
 
             // Bedingungen
             var chips = $('chips');
             chips.textContent = '';
             if (d.present !== undefined) {
-                var presentLabel = t('Present') + (d.force && d.presenceSensor === false ? ' (' + t('forced') + ')' : '');
-                chips.appendChild(chip(presentLabel, d.present ? (d.force && d.presenceSensor === false ? 'note' : 'yes') : 'no'));
-                chips.appendChild(chip(t('Vacation'), d.vacation ? 'note' : ''));
-                chips.appendChild(chip(t('Switched on today'), d.onToday ? 'yes' : ''));
+                if (!d.present) {
+                    chips.appendChild(chip(t('Nobody present'), 'no'));
+                } else if (d.force && d.presenceSensor === false) {
+                    chips.appendChild(chip(t('Presence forced'), 'note'));
+                }
+                if (d.vacation) {
+                    chips.appendChild(chip(t('Vacation'), 'note'));
+                }
+                if (d.onToday && !d.multiple && d.status !== 2) {
+                    chips.appendChild(chip(t('Switched on today'), ''));
+                }
                 if (d.bright) {
                     chips.appendChild(chip(t('Permanently bright'), 'note'));
                 }
@@ -341,10 +370,11 @@
             Array.prototype.forEach.call(document.querySelectorAll('.toggle'), function (el) {
                 var key = { Automatic: 'automatic', ForcePresence: 'force', AllowMultiple: 'multiple' }[el.getAttribute('data-ident')];
                 el.setAttribute('aria-checked', d[key] ? 'true' : 'false');
+                el.title = t({ Automatic: 'Automatic', ForcePresence: 'Force presence', AllowMultiple: 'Allow multiple switch-ons' }[el.getAttribute('data-ident')]);
             });
 
             // Letzte Schaltung
-            setText('foot', d.lastSwitch ? t('Last switched') + ': ' + clock(d.lastSwitch) + ' · ' + t(d.lastTarget === 'on' ? 'on' : 'off') + (d.lastReason ? ' · ' + d.lastReason : '') : '');
+            setText('foot', d.lastSwitch && !isOn ? t('Last switched') + ': ' + clock(d.lastSwitch) + ' · ' + t(d.lastTarget === 'on' ? 'on' : 'off') + (d.lastReason ? ' · ' + d.lastReason : '') : '');
 
             tickTime();
             schedule();
@@ -359,7 +389,7 @@
             if (data.sunset) {
                 setText('sunset', clock(data.sunset));
                 var diff = data.sunset - n;
-                setText('sunsetSub', diff > 0 ? t('in') + ' ' + duration(diff) : t('reached') + ' ' + t('since') + ' ' + duration(-diff));
+                setText('sunsetSub', diff > 0 ? t('in') + ' ' + duration(diff) : t('since') + ' ' + duration(-diff));
             } else {
                 setText('sunset', '–');
                 setText('sunsetSub', t('not available'));
