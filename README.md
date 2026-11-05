@@ -2,7 +2,7 @@
 
 [![IP-Symcon ab 8.1](https://img.shields.io/badge/IP--Symcon-ab_8.1-0b6fb3.svg)](https://www.symcon.de)
 [![Optimiert für Symcon 9.0](https://img.shields.io/badge/optimiert_f%C3%BCr-Symcon_9.0-0b6fb3.svg)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
-[![Modul-Version 2.2 (Build 6)](https://img.shields.io/badge/Modul--Version-2.2_(Build_6)-informational.svg)](library.json)
+[![Modul-Version 2.2.1 (Build 7)](https://img.shields.io/badge/Modul--Version-2.2.1_(Build_7)-informational.svg)](library.json)
 [![Tests](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml/badge.svg)](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml)
 [![PHP 8.3 und 8.5](https://img.shields.io/badge/PHP-8.3_%7C_8.5-777bb4.svg?logo=php&logoColor=white)](https://www.php.net)
 [![SDK: IPSModuleStrict](https://img.shields.io/badge/SDK-IPSModuleStrict-success.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/module/)
@@ -187,6 +187,7 @@ DEKO_ExtendTonight(int $InstanceID, int $Minutes): bool  // heute länger, 0 = n
 
 | Version | Build | Datum | Beschreibung |
 |---|---|---|---|
+| 2.2.1 | 7 | 05.11.2026 | Diagnose: Ja/Nein-Plaketten brechen in schmalen Spalten nicht mehr um, Status und Grund nicht doppelt |
 | 2.2 | 6 | 05.11.2026 | Sondertage mit eigener Ausschaltzeit (vorbelegt: Heiligabend, Silvester); „Heute länger“ in Kachel und Variable verlängert nur den aktuellen Abend und setzt sich selbst zurück |
 | 2.1 | 5 | 05.11.2026 | Kachel: Knopf „Details“ öffnet eine Diagnose-Ansicht mit allen Bedingungen, Auslösern, der Tageslogik, dem Ergebnis, den Lampen und dem System |
 | 2.0 | 4 | 05.11.2026 | Saison (Datumsbereich oder ab 1. Advent), Morgenfenster bis Sonnenaufgang, eigene Ausschaltzeit am Wochenende, Urlaub mit Anwesenheitssimulation (Zufallsversatz), je Lampe eigene Ausschaltzeit und Morgen-Teilnahme, Dimmer, Benachrichtigung bei fehlender Rückmeldung oder Sensorausfall |
