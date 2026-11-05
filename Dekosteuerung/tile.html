@@ -131,9 +131,43 @@
         .value { font-size: 15px; }
         .card { padding: 7px 8px; }
     }
+    /* Fußzeile mit Knopf für die Diagnose */
+    .footer { display: flex; align-items: center; gap: 8px; }
+    .footer .foot { flex: 1; min-width: 0; }
+    .link {
+        margin-left: auto; min-height: 36px; padding: 4px 14px; border-radius: var(--pill); border: 1px solid var(--line);
+        background: var(--surface); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; flex: none;
+    }
+    .link:hover { background: var(--surface-hover); }
+
+    /* Diagnose: Ansicht über der ganzen Kachel */
+    .sheet {
+        position: fixed; inset: 0; z-index: 10; overflow-y: auto; overflow-x: hidden;
+        background: var(--popup); color: var(--fg); padding: 44px 14px 14px;
+        display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.35;
+    }
+    .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .sheet-head b { font-size: 17px; }
+    .sheet-head span { color: var(--muted); font-size: 12px; }
+    #sheetClose {
+        flex: none; width: 36px; height: 36px; border-radius: var(--pill); border: 1px solid var(--line);
+        background: var(--surface); color: var(--fg); font-size: 20px; line-height: 1; cursor: pointer;
+    }
+    .sheet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--gap); align-items: start; }
+    .sec { background: var(--surface); border-radius: var(--radius); padding: 10px 12px; min-width: 0; }
+    .sec h4 { margin: 0 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--accent); }
+    .drow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 3px 0; }
+    .drow > span:first-child { color: var(--muted); min-width: 0; }
+    .drow > span:last-child { text-align: right; min-width: 0; overflow-wrap: anywhere; }
+    .pill { display: inline-block; padding: 1px 9px; border-radius: var(--pill); font-size: 12px; font-weight: 600; color: #fff; background: var(--off); }
+    .pill.y { background: var(--ok); }
+    .pill.n { background: var(--bad); }
+    .pill.w { background: var(--warn); }
+
     /* Kleine Kachel: nur Status, Werte und Schalter */
     @media (max-height: 340px) {
         .lamps, .chips, .foot { display: none; }
+        .footer { justify-content: flex-end; }
     }
     @media (max-height: 240px) {
         .stats { display: none; }
@@ -190,7 +224,18 @@
         <button class="toggle" type="button" role="switch" aria-checked="false" data-ident="AllowMultiple"><span data-t="Multiple">Multiple</span><span class="sw" aria-hidden="true"></span></button>
     </div>
 
-    <div class="foot" id="foot"></div>
+    <div class="footer">
+        <div class="foot" id="foot"></div>
+        <button class="link" id="detailsBtn" type="button" aria-haspopup="dialog" data-t="Details">Details</button>
+    </div>
+</div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+    <div class="sheet-head">
+        <div><b id="sheetTitle" data-t="Diagnosis">Diagnosis</b><br><span id="sheetSub"></span></div>
+        <button id="sheetClose" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="sheet-grid" id="sheetBody"></div>
 </div>
 
 <script>
@@ -381,12 +426,181 @@
 
             tickTime();
             schedule();
+            if (!$('sheet').hidden) {
+                renderDebug();
+            }
         }
+
+        // ===== Diagnose =====
+        function pill(value, yes, no) {
+            var el = document.createElement('span');
+            el.className = 'pill ' + (value ? 'y' : 'n');
+            el.textContent = value ? (yes || t('Yes')) : (no || t('No'));
+            return el;
+        }
+
+        function stamp(ts) {
+            if (!ts) {
+                return '–';
+            }
+            var d = new Date((ts - offset) * 1000);
+            return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '. ' + clock(ts);
+        }
+
+        function section(title, rows) {
+            var sec = document.createElement('div');
+            sec.className = 'sec';
+            var h = document.createElement('h4');
+            h.textContent = title;
+            sec.appendChild(h);
+            rows.forEach(function (r) {
+                if (!r) {
+                    return;
+                }
+                var row = document.createElement('div');
+                row.className = 'drow';
+                var label = document.createElement('span');
+                label.textContent = r[0];
+                var value = document.createElement('span');
+                [].concat(r[1]).forEach(function (part, i) {
+                    if (i > 0) {
+                        value.appendChild(document.createTextNode(' '));
+                    }
+                    if (typeof part === 'boolean') {
+                        value.appendChild(pill(part));
+                    } else if (part && part.nodeType) {
+                        value.appendChild(part);
+                    } else {
+                        value.appendChild(document.createTextNode(part === null || part === undefined || part === '' ? '–' : String(part)));
+                    }
+                });
+                row.appendChild(label);
+                row.appendChild(value);
+                sec.appendChild(row);
+            });
+            return sec;
+        }
+
+        function renderDebug() {
+            var body = $('sheetBody');
+            body.textContent = '';
+            var d = data || {};
+            var D = d.debug;
+            setText('sheetSub', (d.statusText || '') + (d.reason ? ' · ' + d.reason : ''));
+            if (!D) {
+                body.appendChild(section(t('Diagnosis'), [[t('Data'), t('No evaluation yet – instance not active?')]]));
+                return;
+            }
+            var n = now();
+            var minRunLeft = d.onSince ? d.onSince + d.minRun - n : 0;
+            var age = D.sensorUpdated ? n - D.sensorUpdated : 0;
+
+            body.appendChild(section(t('Prerequisites'), [
+                [t('Automatic'), D.automatic],
+                [t('Season'), D.seasonMode ? (D.inSeason ? [true] : [false, t('from') + ' ' + D.seasonStart]) : t('All year round')],
+                [t(D.morning ? 'Morning window' : 'Time window'), D.windowOn + '–' + D.windowOff],
+                [t('Time window active'), D.window],
+                [t('Weekend'), D.weekend],
+                [t('Over midnight'), D.overMidnight],
+                [t('Present (total)'), D.present],
+                [t('Presence sensor'), D.presenceSensor === null ? t('none (always present)') : D.presenceSensor],
+                [t('Force presence'), D.force],
+                [t('Vacation'), D.vacation],
+                [t('Vacation simulation'), D.simulation],
+                D.pendingTarget ? [t('Planned switching'), t(D.pendingTarget) + ' ' + t('at') + ' ' + clock(D.pendingAt)] : null
+            ]));
+
+            body.appendChild(section(t('Triggers'), [
+                [t('Brightness'), D.lux === null || D.lux === undefined ? '–' : num(D.lux) + ' lx'],
+                [t('Darker than') + ' ' + num(D.luxOn) + ' lx', D.byLux],
+                [t(D.morning ? 'Before sunrise' : 'Sunset reached'), D.sunDark],
+                [t('Permanently bright') + ' (' + D.brightCount + '/5 > ' + num(D.luxOff) + ')', D.bright],
+                [t('History (every 5 min)'), (D.history || []).map(num).join(' / ')],
+                [t('Sensor current'), D.hasSensor ? D.sensorOk : t('no sensor')],
+                [t('Last sensor value'), D.sensorUpdated ? stamp(D.sensorUpdated) + ' (' + duration(age) + ')' : '–'],
+                D.faultSince ? [t('Sensor fault since'), stamp(D.faultSince)] : null,
+                [t('Sunset'), D.sunset ? clock(D.sunset) : '–'],
+                [t('Sunrise'), D.sunrise ? clock(D.sunrise) : '–']
+            ]));
+
+            body.appendChild(section(t('Day control'), [
+                [t('Switching evening'), D.dayKey],
+                [t('Switched on today'), D.onToday],
+                [t('Allow multiple switch-ons'), D.multiple],
+                [t('Switching on allowed today'), D.multiple || !D.onToday],
+                [t('Enforce target on every check'), D.enforce]
+            ]));
+
+            body.appendChild(section(t('Result'), [
+                [t('Status'), d.statusText || ''],
+                [t('Reason'), d.reason || ''],
+                [t('Decision'), D.target === null ? t('do nothing') : pill(D.target === 'on', t('on'), t('off'))],
+                [t('Last automatic target'), D.lastTarget ? pill(D.lastTarget === 'on', t('on'), t('off')) : '–'],
+                [t('Minimum on-time'), d.onSince ? (minRunLeft > 0 ? t('still') + ' ' + duration(minRunLeft) : pill(true, t('reached'))) : '–'],
+                [t('Next window from'), D.nextOn]
+            ]));
+
+            body.appendChild(section(t('Lights'), (D.lamps || []).map(function (l) {
+                var extra = [];
+                if (l.until) {
+                    extra.push(t('until') + ' ' + l.until);
+                }
+                if (l.morning === false) {
+                    extra.push(t('not in the morning'));
+                }
+                if (l.dimmer) {
+                    extra.push(t('Dimmer') + ' ' + l.level);
+                }
+                var parts = [];
+                if (extra.length) {
+                    parts.push(extra.join(' · '));
+                }
+                if (!l.exists || !l.action) {
+                    var warn = document.createElement('span');
+                    warn.className = 'pill w';
+                    warn.textContent = t(l.exists ? 'no action' : 'missing');
+                    parts.push(warn);
+                } else {
+                    parts.push(pill(l.on, t('on'), t('off')));
+                }
+                return [l.name + ' (#' + l.id + ')', parts];
+            })));
+
+            body.appendChild(section(t('System'), [
+                [t('Last switched'), d.lastSwitch ? stamp(d.lastSwitch) + ' · ' + t(d.lastTarget === 'on' ? 'on' : 'off') : '–'],
+                [t('Reason'), d.lastReason || ''],
+                [t('No confirmation'), (d.unconfirmed || []).length ? (d.unconfirmed || []).join(', ') : '–'],
+                [t('Instance'), d.instanceStatus === 102 ? pill(true, t('active')) : pill(false, '', d.error || String(d.instanceStatus))],
+                [t('Data from'), stamp(n)]
+            ]));
+        }
+
+        function openSheet(open) {
+            $('sheet').hidden = !open;
+            $('detailsBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open) {
+                renderDebug();
+                $('sheetClose').focus();
+            } else {
+                $('detailsBtn').focus();
+            }
+        }
+
+        $('detailsBtn').addEventListener('click', function () { openSheet(true); });
+        $('sheetClose').addEventListener('click', function () { openSheet(false); });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !$('sheet').hidden) {
+                openSheet(false);
+            }
+        });
 
         // Teile, die von der Uhrzeit abhängen (Countdown)
         function tickTime() {
             if (!data) {
                 return;
+            }
+            if (!$('sheet').hidden) {
+                renderDebug();
             }
             var n = now();
             var sun = data.sunrise || data.sunset;

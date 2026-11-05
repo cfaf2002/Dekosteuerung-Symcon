@@ -430,6 +430,7 @@ class Dekosteuerung extends IPSModuleStrict
         // Helligkeit
         $lux = null;
         $age = null;
+        $updated = 0;
         $sensorOk = false;
         $bid = $this->ReadPropertyInteger('BrightnessVariableID');
         $hasSensor = $bid > 0 && IPS_VariableExists($bid);
@@ -483,6 +484,8 @@ class Dekosteuerung extends IPSModuleStrict
             'hasSensor'      => $hasSensor,
             'sensorOk'       => $sensorOk,
             'faultSince'     => $faultSince,
+            'sensorUpdated'  => $updated,
+            'sensorMaxAge'   => max(1, $this->ReadPropertyInteger('SensorMaxAge')) * 60,
             'lux'            => $hasSensor ? $lux : null,
             'luxOn'          => $luxOn,
             'luxOff'         => $luxOff,
@@ -848,6 +851,7 @@ class Dekosteuerung extends IPSModuleStrict
             $data['sunset'] = $ctx['sunset'];
             $data['sunrise'] = $ctx['morning'] ? $ctx['sunrise'] : 0;
             $data['onToday'] = $ctx['onToday'];
+            $data['debug'] = $this->DebugData($ctx, $result);
         } else {
             if (!isset($data['timeOn'])) {
                 $data['timeOn'] = date('H:i', (int) $this->GetValue('TimeOn'));
@@ -867,6 +871,70 @@ class Dekosteuerung extends IPSModuleStrict
             $data['now'] = $this->Now();
             $this->UpdateVisualizationValue((string) json_encode($data));
         }
+    }
+
+    /** Diagnose für die Detailansicht der Kachel – nur Werte, die sich nicht jede Minute ändern */
+    private function DebugData(array $ctx, array $result): array
+    {
+        $rows = $this->LampRows();
+        $lamps = [];
+        foreach ($rows as $id => $row) {
+            $offAt = $this->LampOffTime($row, $ctx['dayKey'], $ctx['eveningOn']);
+            $lamps[] = [
+                'id'      => $id,
+                'name'    => $this->LightName($id),
+                'exists'  => IPS_VariableExists($id),
+                'action'  => IPS_VariableExists($id) && HasAction($id),
+                'on'      => $this->LampOn($id),
+                'until'   => $row['OffTime'],
+                'offAt'   => $offAt,
+                'morning' => $row['Morning'],
+                'level'   => $row['Level'],
+                'dimmer'  => IPS_VariableExists($id) && IPS_GetVariable($id)['VariableType'] !== VARIABLETYPE_BOOLEAN,
+            ];
+        }
+        return [
+            'automatic'     => $ctx['automatic'],
+            'inSeason'      => $ctx['inSeason'],
+            'seasonMode'    => $ctx['seasonMode'],
+            'seasonStart'   => $ctx['seasonStart'],
+            'window'        => $ctx['windowActive'],
+            'morning'       => $ctx['morning'],
+            'weekend'       => $ctx['weekend'],
+            'overMidnight'  => $ctx['overMidnight'],
+            'windowOn'      => DekoLogic::Clock($ctx['windowOn']),
+            'windowOff'     => DekoLogic::Clock($ctx['windowOff']),
+            'nextOn'        => $ctx['nextOn'],
+            'present'       => $ctx['present'],
+            'presenceSensor' => $ctx['presenceSensor'],
+            'force'         => $ctx['force'],
+            'vacation'      => $ctx['vacationActive'],
+            'simulation'    => $ctx['simulation'],
+            'pendingTarget' => $this->ReadAttributeString('PendingTarget'),
+            'pendingAt'     => $this->ReadAttributeInteger('PendingAt'),
+            'hasSensor'     => $ctx['hasSensor'],
+            'sensorOk'      => $ctx['sensorOk'],
+            'sensorUpdated' => $ctx['sensorUpdated'],
+            'sensorMaxAge'  => $ctx['sensorMaxAge'],
+            'faultSince'    => $ctx['faultSince'],
+            'lux'           => $ctx['lux'],
+            'luxOn'         => $ctx['luxOn'],
+            'luxOff'        => $ctx['luxOff'],
+            'byLux'         => $ctx['sensorOk'] && $ctx['lux'] !== null && $ctx['lux'] < $ctx['luxOn'],
+            'history'       => $ctx['history'],
+            'bright'        => $ctx['bright'],
+            'brightCount'   => $this->ReadPropertyInteger('BrightCount'),
+            'sunDark'       => $ctx['sunDark'],
+            'sunset'        => $ctx['sunset'],
+            'sunrise'       => $ctx['sunrise'],
+            'dayKey'        => $ctx['dayKey'],
+            'onToday'       => $ctx['onToday'],
+            'multiple'      => $ctx['multiple'],
+            'lastTarget'    => $ctx['lastTarget'],
+            'target'        => $result['target'],
+            'enforce'       => $this->ReadPropertyBoolean('Enforce'),
+            'lamps'         => $lamps,
+        ];
     }
 
     private function StatusText(int $status): string

@@ -2,7 +2,7 @@
 
 [![IP-Symcon ab 8.1](https://img.shields.io/badge/IP--Symcon-ab_8.1-0b6fb3.svg)](https://www.symcon.de)
 [![Optimiert für Symcon 9.0](https://img.shields.io/badge/optimiert_f%C3%BCr-Symcon_9.0-0b6fb3.svg)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
-[![Modul-Version 2.0 (Build 4)](https://img.shields.io/badge/Modul--Version-2.0_(Build_4)-informational.svg)](library.json)
+[![Modul-Version 2.1 (Build 5)](https://img.shields.io/badge/Modul--Version-2.1_(Build_5)-informational.svg)](library.json)
 [![Tests](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml/badge.svg)](https://github.com/cfaf2002/Dekosteuerung-Symcon/actions/workflows/tests.yml)
 [![PHP 8.3 und 8.5](https://img.shields.io/badge/PHP-8.3_%7C_8.5-777bb4.svg?logo=php&logoColor=white)](https://www.php.net)
 [![SDK: IPSModuleStrict](https://img.shields.io/badge/SDK-IPSModuleStrict-success.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/module/)
@@ -127,6 +127,7 @@ Zeiten, Grenzwerte und die Schalter „Anwesenheit erzwingen“ und „Mehrfachs
 - Hinweise nur, wenn sie zutreffen: niemand anwesend, Anwesenheit erzwungen, Urlaub oder Urlaubssimulation, Tageslimit, dauerhaft hell
 - Schalter für Automatik, Anwesenheit erzwingen und Mehrfach
 - Kleine Kacheln zeigen nur Status, Werte und Schalter
+- **Details:** Der Knopf unten rechts öffnet eine Diagnose über der ganzen Kachel – Voraussetzungen, Auslöser (mit Messverlauf und Alter des Sensorwerts), Tagessteuerung, Ergebnis (Entscheidung, letztes Automatik-Ziel, Mindestlaufzeit), jede Lampe mit Zustand und Einstellungen sowie System. Schließen mit × oder Esc.
 - Hinweise bei Sensorausfall und fehlender Rückmeldung einer Lampe
 
 Die Kachel bekommt nur Daten (JSON) und setzt alle Texte per `textContent`. Der Countdown läuft nur, solange die Kachel sichtbar ist.
@@ -180,6 +181,7 @@ DEKO_SetAutomatic(int $InstanceID, bool $Active): void  // Automatik ein/aus
 
 | Version | Build | Datum | Beschreibung |
 |---|---|---|---|
+| 2.1 | 5 | 05.11.2026 | Kachel: Knopf „Details“ öffnet eine Diagnose-Ansicht mit allen Bedingungen, Auslösern, der Tageslogik, dem Ergebnis, den Lampen und dem System |
 | 2.0 | 4 | 05.11.2026 | Saison (Datumsbereich oder ab 1. Advent), Morgenfenster bis Sonnenaufgang, eigene Ausschaltzeit am Wochenende, Urlaub mit Anwesenheitssimulation (Zufallsversatz), je Lampe eigene Ausschaltzeit und Morgen-Teilnahme, Dimmer, Benachrichtigung bei fehlender Rückmeldung oder Sensorausfall |
 | 1.2 | 3 | 05.11.2026 | Kachel kompakter: Lichtschalter in der Kopfzeile, „x von y an“, Werte in einer flachen Reihe, nur zutreffende Hinweise, kurze Schalter; bei „Licht an“ Grund und Uhrzeit; passt sich kleinen und schmalen Kacheln an |
 | 1.1 | 2 | 05.11.2026 | Kachel: Platz für den Instanznamen von Symcon, Begründung nicht doppelt, außerhalb des Zeitfensters „Einschalten frühestens ab …“; Lampenliste mit eigenen Namen für die Kachel |
