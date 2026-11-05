@@ -1,0 +1,12 @@
+{
+    "id": "{F4E19F64-730E-4EF7-B063-68E2A4420BCF}",
+    "author": "Armin Frohwerk",
+    "name": "Dekosteuerung",
+    "url": "https://github.com/cfaf2002/Dekosteuerung-Symcon",
+    "compatibility": {
+        "version": "8.1"
+    },
+    "version": "1.0",
+    "build": 1,
+    "date": 1793876039
+}

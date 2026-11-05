@@ -1,0 +1,413 @@
+<!--
+    Kachel für das Modul "Dekosteuerung" (IP-Symcon HTML-SDK)
+    Copyright (c) 2026 Armin Frohwerk · MIT-Lizenz (siehe LICENSE)
+    SPDX-License-Identifier: MIT
+
+    Aufbau: Status oben · großer Lichtschalter mit Lampenliste · Helligkeit mit Grenzen und Trend ·
+    Sonnenuntergang, Zeitfenster und Mindestlaufzeit · Bedingungen · Schalter der Automatik.
+    Sicherheit: Alle Werte werden per textContent gesetzt, nie als HTML.
+    Leistung:   Keine externen Dateien; der Countdown läuft nur, solange die Kachel sichtbar ist.
+-->
+<style>
+    /* ===== Hausstil cfaf2002 · Kachel-Grundlage v1 (siehe STYLEGUIDE.md) =====
+       Farbschema 0 = Symcon-Design (Farben der Visualisierung), 1 = Dunkel, 2 = Hell.
+       Modulspezifisch ist nur --brand (Akzent der festen Farbschemas). */
+    :root {
+        --brand: #f2b544;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --fg: var(--content-color, #eef3f7);
+        --accent: var(--accent-color, var(--brand));
+        --on-accent: #ffffff;
+        --muted: color-mix(in srgb, var(--fg) 65%, transparent);
+        --faint: color-mix(in srgb, var(--fg) 40%, transparent);
+        --line: color-mix(in srgb, var(--fg) 15%, transparent);
+        --surface: color-mix(in srgb, var(--fg) 7%, transparent);
+        --surface-hover: color-mix(in srgb, var(--fg) 12%, transparent);
+        --popup: var(--card-color, #232a33);
+        --ok: #34b36b; --warn: #e2a63b; --bad: #e5484d; --info: #4b8ef0; --off: #8796a5;
+        --radius-l: 14px; --radius: 12px; --radius-s: 8px; --pill: 999px; --gap: 8px;
+    }
+    html.theme-dark  { --fg: #eef3f7; --accent: var(--brand); --tile-bg: #1b2530; --popup: #232d39; }
+    html.theme-light { --fg: #1d2b36; --accent: var(--brand); --tile-bg: #e9eef3; --popup: #ffffff; }
+    html.theme-dark body, html.theme-light body { background: var(--tile-bg); }
+    html, body { font-family: var(--font); color: var(--fg); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+    /* ===== Ende Kachel-Grundlage ===== */
+
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+    * { box-sizing: border-box; }
+
+    #tile {
+        --deko-glow: color-mix(in srgb, var(--brand) 55%, transparent);
+        height: 100%;
+        overflow-y: auto;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        font-size: 14px;
+        line-height: 1.35;
+    }
+
+    /* Kopf */
+    .head { display: flex; align-items: center; gap: 10px; }
+    .dot { width: 10px; height: 10px; border-radius: var(--pill); background: var(--off); flex: none; }
+    .tone-ok .dot { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
+    .tone-warn .dot { background: var(--warn); }
+    .tone-bad .dot { background: var(--bad); }
+    .tone-info .dot { background: var(--info); }
+    .head-text { min-width: 0; flex: 1; }
+    .status { font-weight: 650; font-size: 16px; }
+    .reason { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Hinweise */
+    .alert { border-radius: var(--radius); padding: 8px 10px; font-size: 13px; background: color-mix(in srgb, var(--warn) 18%, transparent); border-left: 4px solid var(--warn); }
+    .alert.bad { background: color-mix(in srgb, var(--bad) 16%, transparent); border-left-color: var(--bad); }
+    .alert b { display: block; }
+
+    /* Lichtschalter */
+    .light { display: flex; gap: 12px; align-items: center; background: var(--surface); border-radius: var(--radius-l); padding: 10px; }
+    #lightBtn {
+        flex: none; width: 64px; height: 64px; border-radius: var(--pill); border: 1px solid var(--line);
+        background: var(--surface); color: var(--muted); cursor: pointer; display: grid; place-items: center;
+        transition: background .25s, color .25s, box-shadow .25s;
+    }
+    #lightBtn:hover { background: var(--surface-hover); }
+    #lightBtn svg { width: 30px; height: 30px; }
+    #lightBtn.on { background: var(--accent); color: var(--on-accent); border-color: transparent; box-shadow: 0 0 22px var(--deko-glow); }
+    .lamps { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+    .lamp { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: var(--pill); background: var(--surface); font-size: 12px; max-width: 100%; }
+    .lamp i { width: 8px; height: 8px; border-radius: var(--pill); background: var(--off); flex: none; }
+    .lamp.on i { background: var(--brand); box-shadow: 0 0 6px var(--deko-glow); }
+    .lamp span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lamp.miss { outline: 1px solid var(--bad); }
+    .lights-label { font-weight: 600; width: 100%; font-size: 13px; }
+
+    /* Karten */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--gap); }
+    .card { background: var(--surface); border-radius: var(--radius); padding: 10px; min-width: 0; }
+    .label { color: var(--muted); font-size: 12px; }
+    .value { font-size: 20px; font-weight: 650; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+    .bar { position: relative; height: 8px; border-radius: var(--pill); background: var(--line); margin: 10px 0 4px; }
+    .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--pill); background: var(--accent); width: 0; transition: width .4s; }
+    .bar .mark { position: absolute; top: -4px; width: 2px; height: 16px; background: var(--fg); opacity: .55; }
+    .bar.fault .fill { background: var(--off); }
+    .bar.progress .fill { background: var(--info); }
+    .scale { display: flex; justify-content: space-between; color: var(--faint); font-size: 11px; }
+
+    /* Bedingungen */
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--pill); background: var(--surface); font-size: 12px; }
+    .chip i { width: 8px; height: 8px; border-radius: var(--pill); background: var(--off); }
+    .chip.yes i { background: var(--ok); }
+    .chip.no i { background: var(--bad); }
+    .chip.note i { background: var(--warn); }
+
+    /* Schalter */
+    .toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--gap); }
+    .toggle {
+        min-height: 40px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface);
+        color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px;
+        text-align: left;
+    }
+    .toggle:hover { background: var(--surface-hover); }
+    .toggle .sw { width: 34px; height: 20px; border-radius: var(--pill); background: var(--line); position: relative; flex: none; transition: background .2s; }
+    .toggle .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: var(--pill); background: #fff; transition: transform .2s; }
+    .toggle[aria-checked="true"] .sw { background: var(--accent); }
+    .toggle[aria-checked="true"] .sw::after { transform: translateX(14px); }
+
+    .foot { color: var(--faint); font-size: 11px; }
+    [hidden] { display: none !important; }
+</style>
+
+<div id="tile" class="tone-off">
+    <div class="head">
+        <span class="dot" aria-hidden="true"></span>
+        <div class="head-text">
+            <div class="status" id="status">–</div>
+            <div class="reason" id="reason"></div>
+        </div>
+    </div>
+
+    <div class="alert bad" id="error" hidden></div>
+    <div class="alert" id="sensorFault" hidden><b data-t="Brightness sensor not current">Brightness sensor not current</b><span id="faultText"></span></div>
+    <div class="alert" id="unconfirmed" hidden><b data-t="No confirmation">No confirmation</b><span id="unconfirmedText"></span></div>
+
+    <div class="light">
+        <button id="lightBtn" type="button" role="switch" aria-checked="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21h6M10 18h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="lamps" id="lamps"><div class="lights-label" data-t="Decoration light">Decoration light</div></div>
+    </div>
+
+    <div class="grid">
+        <div class="card" id="luxCard">
+            <div class="label" data-t="Brightness">Brightness</div>
+            <div class="value" id="lux">–</div>
+            <div class="bar" id="luxBar"><div class="fill" id="luxFill"></div><div class="mark" id="markOn"></div><div class="mark" id="markOff"></div></div>
+            <div class="scale"><span id="limitOn"></span><span id="limitOff"></span></div>
+        </div>
+        <div class="card">
+            <div class="label" data-t="Sunset">Sunset</div>
+            <div class="value" id="sunset">–</div>
+            <div class="sub" id="sunsetSub"></div>
+        </div>
+        <div class="card">
+            <div class="label" data-t="Time window">Time window</div>
+            <div class="value" id="window">–</div>
+            <div class="sub" id="windowSub"></div>
+        </div>
+        <div class="card" id="runCard" hidden>
+            <div class="label" data-t="Minimum on-time">Minimum on-time</div>
+            <div class="value" id="run">–</div>
+            <div class="bar progress"><div class="fill" id="runFill"></div></div>
+        </div>
+    </div>
+
+    <div class="chips" id="chips"></div>
+
+    <div class="toggles">
+        <button class="toggle" type="button" role="switch" aria-checked="false" data-ident="Automatic"><span data-t="Automatic">Automatic</span><span class="sw" aria-hidden="true"></span></button>
+        <button class="toggle" type="button" role="switch" aria-checked="false" data-ident="ForcePresence"><span data-t="Force presence">Force presence</span><span class="sw" aria-hidden="true"></span></button>
+        <button class="toggle" type="button" role="switch" aria-checked="false" data-ident="AllowMultiple"><span data-t="Allow multiple switch-ons">Allow multiple switch-ons</span><span class="sw" aria-hidden="true"></span></button>
+    </div>
+
+    <div class="foot" id="foot"></div>
+</div>
+
+<script>
+    // Hausstil: Farbschema der Kachel (0 = Symcon-Design, 1 = Dunkel, 2 = Hell)
+    function applyTheme(theme) {
+        var root = document.documentElement;
+        root.classList.toggle('theme-dark', theme === 1);
+        root.classList.toggle('theme-light', theme === 2);
+    }
+
+    (function () {
+        'use strict';
+
+        var $ = function (id) { return document.getElementById(id); };
+        var tile = $('tile');
+        var data = null;
+        var offset = 0;       // Serverzeit minus Tablet-Zeit (Sekunden)
+        var timer = 0;
+        var inView = true;
+
+        // Status → Farbton (Werte wie DekoLogic::ST_*)
+        var TONES = { 0: 'info', 1: 'off', 2: 'ok', 3: 'off', 4: 'warn', 5: 'info', 6: 'info', 7: 'warn', 8: 'info' };
+
+        function t(s) {
+            return typeof window.translate === 'function' ? window.translate(s) : s;
+        }
+
+        function send(ident, value) {
+            if (typeof window.requestAction === 'function') {
+                window.requestAction(ident, value);
+            }
+        }
+
+        function now() {
+            return Math.floor(Date.now() / 1000) + offset;
+        }
+
+        function clock(ts) {
+            var d = new Date((ts - offset) * 1000);
+            return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+        }
+
+        function duration(sec) {
+            sec = Math.max(0, Math.round(sec));
+            var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+            return h > 0 ? h + ' h ' + m + ' min' : m + ' min';
+        }
+
+        function num(v) {
+            return Math.round(v).toLocaleString(document.documentElement.lang || undefined);
+        }
+
+        function setText(id, text) {
+            var el = $(id);
+            if (el.textContent !== text) {
+                el.textContent = text;
+            }
+        }
+
+        function chip(label, state) {
+            var el = document.createElement('span');
+            el.className = 'chip ' + state;
+            var dot = document.createElement('i');
+            var text = document.createElement('span');
+            text.textContent = label;
+            el.appendChild(dot);
+            el.appendChild(text);
+            return el;
+        }
+
+        // Übersetzung der festen Texte
+        Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (el) {
+            el.textContent = t(el.getAttribute('data-t'));
+        });
+
+        function render(d) {
+            if (typeof d.now === 'number') {
+                offset = d.now - Math.floor(Date.now() / 1000);
+            }
+            data = d;
+            applyTheme(d.theme || 0);
+
+            tile.className = 'tone-' + (TONES[d.status] || 'off');
+            setText('status', d.statusText || '–');
+            setText('reason', d.reason || '');
+
+            $('error').hidden = !d.error;
+            setText('error', d.error || '');
+
+            // Sensorfehler
+            var fault = d.hasSensor && !d.sensorOk;
+            $('sensorFault').hidden = !fault;
+            if (fault) {
+                setText('faultText', ' ' + t('Switching on by sunset only.') + (d.faultSince ? ' ' + t('Since') + ' ' + duration(now() - d.faultSince) : ''));
+            }
+
+            // Fehlende Rückmeldung
+            var missing = d.unconfirmed || [];
+            $('unconfirmed').hidden = missing.length === 0;
+            setText('unconfirmedText', ' ' + missing.join(', '));
+
+            // Lichtschalter und Lampen
+            var btn = $('lightBtn');
+            btn.classList.toggle('on', !!d.lightsOn);
+            btn.setAttribute('aria-checked', d.lightsOn ? 'true' : 'false');
+            btn.setAttribute('aria-label', t(d.lightsOn ? 'Switch all lights off' : 'Switch all lights on'));
+            var lamps = $('lamps');
+            while (lamps.children.length > 1) {
+                lamps.removeChild(lamps.lastChild);
+            }
+            (d.lamps || []).forEach(function (l) {
+                var el = document.createElement('span');
+                el.className = 'lamp' + (l.on ? ' on' : '') + (missing.indexOf(l.name) >= 0 ? ' miss' : '');
+                var dot = document.createElement('i');
+                var name = document.createElement('span');
+                name.textContent = l.name;
+                el.appendChild(dot);
+                el.appendChild(name);
+                lamps.appendChild(el);
+            });
+
+            // Helligkeit
+            var luxOn = d.luxOn || 0, luxOff = d.luxOff || 0;
+            $('luxCard').hidden = !d.hasSensor;
+            if (d.hasSensor) {
+                var arrow = d.trend > 0 ? ' ↗' : (d.trend < 0 ? ' ↘' : ' →');
+                setText('lux', d.lux === null || d.lux === undefined ? '–' : num(d.lux) + ' lx' + arrow);
+                var max = Math.max(luxOff * 1.4, luxOn * 2, 100);
+                var pct = function (v) { return Math.max(0, Math.min(100, v / max * 100)) + '%'; };
+                $('luxFill').style.width = pct(d.lux || 0);
+                $('markOn').style.left = pct(luxOn);
+                $('markOff').style.left = pct(luxOff);
+                $('luxBar').classList.toggle('fault', !d.sensorOk);
+                setText('limitOn', t('On') + ' < ' + num(luxOn));
+                setText('limitOff', t('Off') + ' > ' + num(luxOff));
+            }
+
+            // Zeitfenster
+            setText('window', (d.timeOn || '–') + ' – ' + (d.timeOff || '–'));
+            setText('windowSub', d.window ? t('active') : t('not active'));
+
+            // Bedingungen
+            var chips = $('chips');
+            chips.textContent = '';
+            if (d.present !== undefined) {
+                var presentLabel = t('Present') + (d.force && d.presenceSensor === false ? ' (' + t('forced') + ')' : '');
+                chips.appendChild(chip(presentLabel, d.present ? (d.force && d.presenceSensor === false ? 'note' : 'yes') : 'no'));
+                chips.appendChild(chip(t('Vacation'), d.vacation ? 'note' : ''));
+                chips.appendChild(chip(t('Switched on today'), d.onToday ? 'yes' : ''));
+                if (d.bright) {
+                    chips.appendChild(chip(t('Permanently bright'), 'note'));
+                }
+            }
+
+            // Schalter
+            Array.prototype.forEach.call(document.querySelectorAll('.toggle'), function (el) {
+                var key = { Automatic: 'automatic', ForcePresence: 'force', AllowMultiple: 'multiple' }[el.getAttribute('data-ident')];
+                el.setAttribute('aria-checked', d[key] ? 'true' : 'false');
+            });
+
+            // Letzte Schaltung
+            setText('foot', d.lastSwitch ? t('Last switched') + ': ' + clock(d.lastSwitch) + ' · ' + t(d.lastTarget === 'on' ? 'on' : 'off') + (d.lastReason ? ' · ' + d.lastReason : '') : '');
+
+            tickTime();
+            schedule();
+        }
+
+        // Teile, die von der Uhrzeit abhängen (Countdown)
+        function tickTime() {
+            if (!data) {
+                return;
+            }
+            var n = now();
+            if (data.sunset) {
+                setText('sunset', clock(data.sunset));
+                var diff = data.sunset - n;
+                setText('sunsetSub', diff > 0 ? t('in') + ' ' + duration(diff) : t('reached') + ' ' + t('since') + ' ' + duration(-diff));
+            } else {
+                setText('sunset', '–');
+                setText('sunsetSub', t('not available'));
+            }
+            var runLeft = data.onSince ? data.onSince + data.minRun - n : 0;
+            var showRun = data.onSince > 0 && data.minRun > 0 && runLeft > 0;
+            $('runCard').hidden = !showRun;
+            if (showRun) {
+                setText('run', t('still') + ' ' + duration(runLeft));
+                $('runFill').style.width = Math.min(100, (n - data.onSince) / data.minRun * 100) + '%';
+            }
+        }
+
+        function schedule() {
+            clearInterval(timer);
+            timer = 0;
+            if (inView && document.visibilityState !== 'hidden') {
+                timer = setInterval(tickTime, 30000);
+            }
+        }
+
+        $('lightBtn').addEventListener('click', function () {
+            send('Lights', !(data && data.lightsOn));
+        });
+        Array.prototype.forEach.call(document.querySelectorAll('.toggle'), function (el) {
+            el.addEventListener('click', function () {
+                send(el.getAttribute('data-ident'), el.getAttribute('aria-checked') !== 'true');
+            });
+        });
+
+        document.addEventListener('visibilitychange', schedule);
+        if (window.IntersectionObserver) {
+            new IntersectionObserver(function (entries) {
+                inView = entries[0].isIntersecting;
+                if (inView) {
+                    tickTime();
+                }
+                schedule();
+            }).observe(tile);
+        }
+
+        // Wird von IP-Symcon bei UpdateVisualizationValue() aufgerufen
+        window.handleMessage = function (msg) {
+            try {
+                render(typeof msg === 'string' ? JSON.parse(msg) : msg);
+            } catch (e) {
+                console.error('Deko-Kachel:', e);
+            }
+        };
+
+        var initial = /*INITIAL_DATA*/null;
+        if (initial) {
+            window.handleMessage(initial);
+        }
+    })();
+</script>

@@ -1,0 +1,248 @@
+{
+    "elements": [
+        {
+            "type": "Label",
+            "caption": "Switches the decoration lights on at dusk or sunset within a time window, as long as someone is at home, and off again at the end of the window, when nobody is present or when it stays bright. Times, limits and switches are variables of the instance and can be changed in the visualization."
+        },
+        {
+            "type": "CheckBox",
+            "name": "Active",
+            "caption": "Instance active"
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Lights",
+            "expanded": true,
+            "items": [
+                {
+                    "type": "List",
+                    "name": "Lights",
+                    "caption": "Lights to switch (switch variables with action)",
+                    "rowCount": 6,
+                    "add": true,
+                    "delete": true,
+                    "columns": [
+                        {
+                            "caption": "Variable",
+                            "name": "VariableID",
+                            "width": "auto",
+                            "add": 0,
+                            "edit": {
+                                "type": "SelectVariable",
+                                "requiredAction": 1,
+                                "validVariableTypes": [0]
+                            }
+                        }
+                    ],
+                    "values": []
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Triggers",
+            "expanded": true,
+            "items": [
+                {
+                    "type": "SelectVariable",
+                    "name": "BrightnessVariableID",
+                    "caption": "Brightness sensor (lux, optional)",
+                    "width": "600px"
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        {
+                            "type": "NumberSpinner",
+                            "name": "SensorMaxAge",
+                            "caption": "Sensor counts as failed without new value after",
+                            "suffix": "min",
+                            "minimum": 5,
+                            "maximum": 1440
+                        },
+                        {
+                            "type": "NumberSpinner",
+                            "name": "BrightCount",
+                            "caption": "Permanently bright: values above the switch-off limit (of the last 5)",
+                            "minimum": 1,
+                            "maximum": 5
+                        }
+                    ]
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "UseSunset",
+                    "caption": "Also switch on at sunset (and while the sensor has failed)"
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        {
+                            "type": "SelectVariable",
+                            "name": "SunsetVariableID",
+                            "caption": "Sunset variable (empty = from Location)",
+                            "width": "400px"
+                        },
+                        {
+                            "type": "NumberSpinner",
+                            "name": "SunsetOffset",
+                            "caption": "Offset",
+                            "suffix": "min",
+                            "minimum": -180,
+                            "maximum": 180
+                        }
+                    ]
+                },
+                {
+                    "type": "Label",
+                    "name": "SunsetInfo",
+                    "caption": ""
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Conditions",
+            "expanded": true,
+            "items": [
+                {
+                    "type": "SelectVariable",
+                    "name": "PresenceVariableID",
+                    "caption": "Presence (true = someone at home; empty = always present)",
+                    "width": "600px"
+                },
+                {
+                    "type": "SelectVariable",
+                    "name": "VacationVariableID",
+                    "caption": "Vacation (true = blocks switching on; switching off still works)",
+                    "width": "600px"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "MinOnMinutes",
+                    "caption": "Minimum on-time before switching off because of absence or brightness",
+                    "suffix": "min",
+                    "minimum": 0,
+                    "maximum": 480
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "Enforce",
+                    "caption": "Enforce the target on every check (switches manually changed lights back)"
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Tile",
+            "expanded": false,
+            "items": [
+                {
+                    "type": "CheckBox",
+                    "name": "UseTile",
+                    "caption": "Use own tile in the tile visualization"
+                },
+                {
+                    "type": "Select",
+                    "name": "TileTheme",
+                    "caption": "Colour scheme of the tile",
+                    "options": [
+                        {
+                            "caption": "Symcon design (colours of the visualization)",
+                            "value": 0
+                        },
+                        {
+                            "caption": "Dark",
+                            "value": 1
+                        },
+                        {
+                            "caption": "Light",
+                            "value": 2
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Take over from the previous script",
+            "expanded": false,
+            "items": [
+                {
+                    "type": "Label",
+                    "caption": "Reads sensors, lights, times, limits and the last switching state from your previous script. The script is only read, never executed. Times, limits and switches are written to the instance variables immediately; sensors and lights are saved with \"Apply changes\"."
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        {
+                            "type": "SelectScript",
+                            "name": "ImportScriptID",
+                            "caption": "Previous script",
+                            "width": "400px"
+                        },
+                        {
+                            "type": "Button",
+                            "caption": "Take over settings",
+                            "onClick": "IPS_RequestAction($id, 'ImportScript', $ImportScriptID);"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "type": "Button",
+            "caption": "Evaluate now",
+            "onClick": "DEKO_Evaluate($id);"
+        },
+        {
+            "type": "RowLayout",
+            "items": [
+                {
+                    "type": "Button",
+                    "caption": "All lights on",
+                    "onClick": "DEKO_SetLights($id, true);"
+                },
+                {
+                    "type": "Button",
+                    "caption": "All lights off",
+                    "onClick": "DEKO_SetLights($id, false);"
+                }
+            ]
+        }
+    ],
+    "status": [
+        {
+            "code": 102,
+            "icon": "active",
+            "caption": "Active"
+        },
+        {
+            "code": 104,
+            "icon": "inactive",
+            "caption": "Instance is inactive"
+        },
+        {
+            "code": 200,
+            "icon": "error",
+            "caption": "Please add the lights"
+        },
+        {
+            "code": 201,
+            "icon": "error",
+            "caption": "A light is missing or has no action"
+        },
+        {
+            "code": 202,
+            "icon": "error",
+            "caption": "A sensor variable does not exist"
+        },
+        {
+            "code": 203,
+            "icon": "error",
+            "caption": "No trigger: select a brightness sensor or use the sunset"
+        }
+    ]
+}

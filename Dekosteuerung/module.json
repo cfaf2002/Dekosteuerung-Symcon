@@ -1,0 +1,12 @@
+{
+    "id": "{83B0BC87-906B-44E2-AED2-15BEA4F8A383}",
+    "name": "Dekosteuerung",
+    "type": 3,
+    "vendor": "Armin Frohwerk",
+    "aliases": [],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "DEKO",
+    "url": "https://github.com/cfaf2002/Dekosteuerung-Symcon"
+}
